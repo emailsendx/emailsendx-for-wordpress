@@ -13,10 +13,12 @@
 	--esx-warn:       #f59e0b;
 	--esx-error:      #ef4444;
 	/* Card radius matches the app's `rounded-xl` (16px). ShaonPro. */
-	--esx-radius:     16px;
+	--esx-radius:     10px;
 	--esx-radius-sm:  8px;  /* matches `rounded-lg` for buttons + inputs */
 	--esx-shadow-sm:  0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
 	--esx-shadow-md:  0 4px 12px rgba(15, 23, 42, 0.08);
+	/* Chevron used on `<select>` + disclosure rows (stroke = primary-2). */
+	--esx-icon-chevron-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%232563EB' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 /* ─── Layout shell · ShaonPro ─── */
@@ -29,10 +31,38 @@
 	background: transparent;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+	accent-color: var(--esx-primary);
 }
 .esx-wrap *,
 .esx-wrap *::before,
 .esx-wrap *::after { box-sizing: border-box; }
+
+/*
+ * wp-admin `forms.css` + admin colour schemes can set `select` / `input`
+ * colours that fight our light cards (washed or “invisible” text). Pin
+ * legible values on our plugin screen only. ShaonPro.
+ */
+.toplevel_page_emailsendx-sync .esx-wrap select.esx-select,
+.toplevel_page_emailsendx-sync .esx-wrap input.esx-input,
+.toplevel_page_emailsendx-sync .esx-wrap textarea.esx-textarea {
+	color: var(--esx-text) !important;
+	-webkit-text-fill-color: var(--esx-text) !important;
+	background-color: #fff !important;
+	opacity: 1 !important;
+	border-color: #d2e4fe !important;
+	border-radius: 4px !important;
+	height: 49px !important;
+}
+
+.toplevel_page_emailsendx-sync .esx-wrap select.esx-select:focus,
+.toplevel_page_emailsendx-sync .esx-wrap input.esx-input:focus,
+.toplevel_page_emailsendx-sync .esx-wrap textarea.esx-textarea:focus {
+	border-color: var(--esx-primary) !important;
+	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.22) !important;
+}
+
+
+
 
 .esx-grid-2 {
 	display: grid;
@@ -283,14 +313,14 @@
 .esx-select,
 .esx-textarea {
 	padding: 10px 12px;
-	border-radius: 8px;
-	border: 1px solid #d4d8e0;
+	border-radius: var(--esx-radius-sm);
+	border: 1px solid var(--esx-border);
 	font-size: 14px;
 	width: 100%;
 	max-width: 480px;
 	background: #fff;
 	color: var(--esx-text);
-	transition: border-color 0.15s, box-shadow 0.15s;
+	transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
 	font-family: inherit;
 }
 .esx-textarea { min-height: 90px; resize: vertical; }
@@ -300,6 +330,13 @@
 	outline: none;
 	border-color: var(--esx-primary);
 	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.20);
+}
+.esx-input:focus-visible,
+.esx-select:focus-visible,
+.esx-textarea:focus-visible {
+	outline: none;
+	border-color: var(--esx-primary);
+	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.22);
 }
 .esx-field {
 	display: flex;
@@ -312,6 +349,7 @@
 	font-weight: 500;
 	color: var(--esx-text);
 }
+
 
 /* ─── Buttons ─── */
 .esx-btn {
@@ -421,6 +459,7 @@
 	border: 1px solid var(--esx-border);
 	border-radius: 12px;
 	padding: 14px 16px;
+	margin: 20px 0px;
 	transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
 	position: relative;
 }
@@ -503,6 +542,14 @@
 	margin-top: 16px;
 }
 
+/* Mapping rows: selects fill the cell and match table density. */
+.esx-mapping-table .esx-mapping-target .esx-select {
+	max-width: none;
+	width: 100%;
+	min-height: 42px;
+	font-weight: 500;
+}
+
 /* ─── Empty state ─── */
 .esx-empty-state {
 	text-align: center;
@@ -571,6 +618,10 @@
 .esx-modal-footer { border-top: 1px solid var(--esx-border); justify-content: flex-end; }
 .esx-modal-header h3 { margin: 0; font-size: 16px; }
 .esx-modal-body { padding: 20px; }
+.esx-modal-body .esx-select {
+	max-width: none;
+	width: 100%;
+}
 .esx-modal-error { display: block; margin-top: 8px; }
 
 /* ─── Side card / merge tag list ─── */
@@ -722,14 +773,24 @@
 	justify-content: space-between;
 	gap: 16px;
 	user-select: none;
+	border-radius: inherit;
+	transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.esx-manual-summary:hover {
+	background: rgba(39, 122, 255, 0.04);
 }
 .esx-manual-summary::-webkit-details-marker { display: none; }
 .esx-manual-summary::after {
-	content: "▾";
-	color: var(--esx-text-muted);
-	font-size: 14px;
-	transition: transform 0.18s ease;
+	content: "";
+	width: 18px;
+	height: 18px;
+	flex-shrink: 0;
+	margin-left: 8px;
+	background: var(--esx-icon-chevron-down) center / 18px 18px no-repeat;
+	opacity: 0.85;
+	transition: transform 0.2s ease, opacity 0.15s ease;
 }
+.esx-manual-summary:hover::after { opacity: 1; }
 .esx-manual-card[open] .esx-manual-summary::after { transform: rotate(180deg); }
 .esx-manual-summary-text {
 	font-weight: 600;
@@ -1141,18 +1202,25 @@
 .esx-hero-select {
 	max-width: none;
 	width: 100%;
-	height: 44px;
+	min-height: 44px;
+	height: auto;
+	line-height: 1.35;
 	font-size: 14px;
-	font-weight: 500;
-	background: #fff;
+	font-weight: 600;
+	background-color: #fff;
 	border: 1px solid var(--esx-border);
 	border-radius: 12px;
-	padding: 0 14px;
+	/* Symmetric padding — native chevron needs room; do not fake a second arrow (Windows paint bug). */
+	padding: 11px 14px;
 	box-shadow: var(--esx-shadow-sm);
 }
 .esx-hero-select:focus {
 	border-color: var(--esx-primary);
 	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.18);
+}
+.esx-hero-select:focus-visible {
+	border-color: var(--esx-primary);
+	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.22);
 }
 
 /* hero CTA */
@@ -1238,9 +1306,11 @@
 /* ─── Settings: compact connect status row · ShaonPro ─── */
 .esx-status-card {
 	display: flex;
+	border-radius: 10px;
 	align-items: center;
 	gap: 14px;
-	padding: 14px 18px;
+	margin: 20px 0px;
+	padding: 16px 18px;
 	background:
 		linear-gradient(135deg, rgba(39, 122, 255, 0.04) 0%, rgba(96, 165, 250, 0.02) 100%),
 		#fff;
@@ -1340,12 +1410,19 @@
 	align-items: center;
 	flex-wrap: wrap;
 }
-.esx-row-form .esx-select,
+.esx-row-form .esx-select {
+	flex: 1 1 240px;
+	max-width: none;
+	/* `min-width: 0` on flex + WebKit collapses some `<select>` labels. */
+	min-width: min(100%, 220px);
+}
 .esx-row-form .esx-input {
 	flex: 1 1 220px;
 	max-width: none;
 	min-width: 0;
 }
+
+
 .esx-row-form .esx-btn { flex-shrink: 0; }
 
 /* settings: inline create-list mini-form (collapsible) */
@@ -1363,8 +1440,31 @@
 	font-weight: 600;
 	color: var(--esx-primary);
 	user-select: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 8px 10px;
+	margin: -4px -6px 0;
+	border-radius: var(--esx-radius-sm);
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+.esx-mini-create summary:hover {
+	background: rgba(39, 122, 255, 0.06);
+	color: var(--esx-primary-2);
 }
 .esx-mini-create summary::-webkit-details-marker { display: none; }
+.esx-mini-create summary::after {
+	content: "";
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	background: var(--esx-icon-chevron-down) center / 16px 16px no-repeat;
+	opacity: 0.75;
+	transition: transform 0.2s ease, opacity 0.15s ease;
+}
+.esx-mini-create summary:hover::after { opacity: 1; }
+.esx-mini-create[open] summary::after { transform: rotate(180deg); }
 .esx-mini-create[open] summary { margin-bottom: 10px; color: var(--esx-text); }
 
 /* settings: behavior row (toggle + role on one line) */
@@ -1424,21 +1524,7 @@
 	color: var(--esx-text);
 }
 
-/* ─── WP admin override: drop the gap between menu icon + text ─── */
-#adminmenu #toplevel_page_emailsendx-sync .wp-menu-image img,
-#adminmenu #toplevel_page_emailsendx-sync .wp-menu-image svg {
-	width: 18px !important;
-	height: 18px !important;
-	padding: 7px 0 !important;
-	opacity: 0.85;
-}
-#adminmenu #toplevel_page_emailsendx-sync:hover .wp-menu-image img,
-#adminmenu #toplevel_page_emailsendx-sync.wp-has-current-submenu .wp-menu-image img,
-#adminmenu #toplevel_page_emailsendx-sync.current .wp-menu-image img,
-#adminmenu #toplevel_page_emailsendx-sync:hover .wp-menu-image svg,
-#adminmenu #toplevel_page_emailsendx-sync.wp-has-current-submenu .wp-menu-image svg {
-	opacity: 1;
-}
+/* Sidebar menu icon + tint: `assets/css/admin-menu.css` (global). */
 
 /* ─── WP admin chrome reset on our screen ─── */
 .toplevel_page_emailsendx-sync #wpcontent { padding-left: 0; }
@@ -1448,4 +1534,445 @@
 .toplevel_page_emailsendx-sync .esx-wrap .error {
 	border-radius: 8px;
 	border-left-width: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * ShaonPro · `<select>` polish (native control — no appearance:none)
+ *
+ * Custom arrows + `appearance:none` desync the closed frame from the OS
+ * popup on Windows Chrome/Edge (“ghost” box over the list). Keep the
+ * browser’s native chevron + list; style only the closed field.
+ * ───────────────────────────────────────────────────────────────── */
+
+.esx-select {
+	cursor: pointer;
+	min-height: 40px;
+	line-height: 1.35;
+	font-weight: 500;
+	background-color: #fff;
+	padding: 10px 12px;
+}
+.esx-select option,
+.esx-select optgroup {
+	font-family: inherit;
+}
+.esx-input:hover {
+	border-color: var(--esx-primary-3);
+}
+.esx-select:hover {
+	border-color: var(--esx-primary-3);
+	background-color: #fafcff;
+}
+.esx-input[disabled],
+.esx-select[disabled] {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+.esx-select[disabled] {
+	background-color: #f1f5f9;
+}
+.esx-select[disabled]:hover {
+	background-color: #f1f5f9;
+	border-color: var(--esx-border);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * ShaonPro · Role chip multi-select (.esx-chipset / .esx-chip)
+ * ───────────────────────────────────────────────────────────────── */
+
+.esx-chipset {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 6px 0 4px;
+}
+.esx-chipset-compact {
+	gap: 6px;
+}
+.esx-chipset:focus-within {
+	outline: none;
+}
+.esx-chip {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 14px;
+	border-radius: 999px;
+	background: #F5F7FB;
+	border: 1px solid #E2E8F0;
+	color: #334155;
+	font-size: 13px;
+	line-height: 1.2;
+	cursor: pointer;
+	user-select: none;
+	transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.esx-chip:hover {
+	background: rgba(96, 165, 250, 0.12);
+	border-color: var(--esx-primary-3);
+	color: var(--esx-primary-2);
+}
+.esx-chip input[type="checkbox"] {
+	position: absolute;
+	opacity: 0;
+	width: 1px;
+	height: 1px;
+	margin: 0;
+	pointer-events: none;
+}
+.esx-chip:focus-within {
+	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.22);
+}
+.esx-chip.is-selected,
+.esx-chip:has(input:checked) {
+	background: linear-gradient(135deg, var(--esx-primary) 0%, var(--esx-primary-2) 100%);
+	border-color: var(--esx-primary-2);
+	color: #fff;
+}
+.esx-chip-label {
+	display: inline-block;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * ShaonPro · Progress shell (.esx-progress-shell)
+ * ───────────────────────────────────────────────────────────────── */
+
+.esx-progress-shell {
+	margin: 14px 0 4px;
+	padding: 14px 16px;
+	background: #fff;
+	border: 1px solid #E2E8F0;
+	border-radius: 12px;
+	box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+.esx-progress-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+.esx-progress-phase {
+	font-size: 13px;
+	font-weight: 600;
+	color: #1E293B;
+}
+.esx-progress-percent {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--esx-primary-2);
+	font-variant-numeric: tabular-nums;
+}
+.esx-progress-bar {
+	position: relative;
+	height: 8px;
+	border-radius: 999px;
+	background: rgba(39, 122, 255, 0.12);
+	overflow: hidden;
+}
+.esx-progress-bar-fill {
+	position: relative;
+	height: 100%;
+	width: 0%;
+	border-radius: 999px;
+	background-color: var(--esx-primary-2);
+	background-image:
+		linear-gradient(90deg, var(--esx-primary), var(--esx-primary-2)),
+		repeating-linear-gradient(
+			45deg,
+			rgba(255, 255, 255, 0.22) 0,
+			rgba(255, 255, 255, 0.22) 8px,
+			rgba(255, 255, 255, 0) 8px,
+			rgba(255, 255, 255, 0) 16px
+		);
+	background-blend-mode: overlay;
+	background-size: 100% 100%, 32px 32px;
+	transition: width 300ms ease;
+	animation: esx-progress-stripes 1.2s linear infinite;
+}
+@keyframes esx-progress-stripes {
+	from { background-position: 0 0, 0 0; }
+	to   { background-position: 0 0, 32px 0; }
+}
+.esx-progress-stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px;
+	margin-top: 12px;
+}
+.esx-progress-stats .esx-stat {
+	padding: 10px 12px;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * ShaonPro · Activity feed (.esx-activity)
+ * ───────────────────────────────────────────────────────────────── */
+
+.esx-activity {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.esx-activity-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 10px 12px;
+	background: #fff;
+	border: 1px solid #EEF1F6;
+	border-radius: 10px;
+	transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.esx-activity-row:hover {
+	border-color: var(--esx-primary-3);
+	box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+.esx-activity-icon {
+	flex: 0 0 auto;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+}
+.esx-activity-icon svg { display: block; }
+.esx-activity-icon-ok    { background: #16A34A; }
+.esx-activity-icon-warn  { background: #F59E0B; }
+.esx-activity-icon-error { background: #DC2626; }
+.esx-activity-icon-info  { background: var(--esx-primary); }
+.esx-activity-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+.esx-activity-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: #0F172A;
+	line-height: 1.35;
+}
+.esx-activity-sub {
+	font-size: 12px;
+	color: #64748B;
+	line-height: 1.3;
+}
+.esx-activity-meta {
+	flex: 0 0 auto;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	text-align: right;
+}
+.esx-activity-duration {
+	font-size: 11px;
+	color: #64748B;
+	font-variant-numeric: tabular-nums;
+}
+
+/* Mini-variant used inside the Sync tab "Recent syncs" strip. */
+.esx-activity-mini .esx-activity-row {
+	padding: 8px 10px;
+}
+.esx-activity-mini .esx-activity-icon {
+	width: 26px;
+	height: 26px;
+}
+.esx-recent-strip .esx-recent-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+/* Raw-table power-user drawer on the Log tab. */
+.esx-raw-table {
+	margin-top: 14px;
+	padding: 8px 0;
+	border-top: 1px dashed var(--esx-border);
+}
+.esx-raw-table > summary {
+	list-style: none;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	font-size: 12.5px;
+	font-weight: 600;
+	color: var(--esx-text-muted);
+	margin-bottom: 8px;
+	padding: 6px 8px;
+	margin-left: -8px;
+	margin-right: -8px;
+	border-radius: var(--esx-radius-sm);
+	transition: background-color 0.15s ease, color 0.15s ease;
+}
+.esx-raw-table > summary::-webkit-details-marker { display: none; }
+.esx-raw-table > summary::after {
+	content: "";
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	background: var(--esx-icon-chevron-down) center / 16px 16px no-repeat;
+	opacity: 0.75;
+	transition: transform 0.2s ease, opacity 0.15s ease;
+}
+.esx-raw-table[open] > summary::after { transform: rotate(180deg); }
+.esx-raw-table > summary:hover {
+	color: var(--esx-primary-2);
+	background: rgba(39, 122, 255, 0.05);
+}
+.esx-raw-table > summary:hover::after { opacity: 1; }
+
+/* ─── Admin notices (brand-styled) · ShaonPro ─────────────────────── */
+.esx-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 14px 16px;
+	margin: 10px 0;
+	background: #fff;
+	border: 1px solid var(--esx-border);
+	border-left: 4px solid var(--esx-primary);
+	border-radius: var(--esx-radius-sm);
+	box-shadow: var(--esx-shadow-sm);
+	font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	color: var(--esx-text);
+	transition: opacity .2s ease;
+}
+.esx-notice.is-dismissing {
+	opacity: 0;
+	transition: opacity .2s ease;
+}
+.esx-notice-info {
+	border-left-color: var(--esx-primary);
+	background: rgba(39, 122, 255, 0.06);
+	color: var(--esx-primary-2);
+}
+.esx-notice-success {
+	border-left-color: var(--esx-success);
+	background: rgba(16, 185, 129, 0.06);
+	color: #047857;
+}
+.esx-notice-warning {
+	border-left-color: var(--esx-warn);
+	background: rgba(245, 158, 11, 0.06);
+	color: #b45309;
+}
+.esx-notice-error {
+	border-left-color: var(--esx-error);
+	background: rgba(239, 68, 68, 0.06);
+	color: #b91c1c;
+}
+.esx-notice-icon {
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	color: inherit;
+}
+.esx-notice-icon svg {
+	width: 20px;
+	height: 20px;
+	display: block;
+}
+.esx-notice-body { flex: 1 1 auto; min-width: 0; }
+.esx-notice-message {
+	margin: 0;
+	font-size: 13.5px;
+	line-height: 1.5;
+	color: var(--esx-text);
+}
+.esx-notice-actions {
+	margin-top: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.esx-notice-dismiss {
+	flex: 0 0 auto;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	border: 0;
+	border-radius: 6px;
+	color: var(--esx-text-muted);
+	cursor: pointer;
+	transition: background-color .15s ease, color .15s ease;
+}
+.esx-notice-dismiss:hover,
+.esx-notice-dismiss:focus {
+	background: rgba(15, 23, 42, 0.06);
+	color: var(--esx-text);
+	outline: none;
+}
+.esx-notice-dismiss svg { width: 14px; height: 14px; display: block; }
+
+/* Inline countdown ticker (JS updates the numeric span). */
+.esx-countdown-value {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+
+/* ─── Large-sync confirm modal · ShaonPro ─────────────────────────── */
+.esx-confirm-modal-backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	z-index: 99999;
+}
+.esx-confirm-modal {
+	width: 100%;
+	max-width: 420px;
+	background: #fff;
+	border-radius: var(--esx-radius);
+	box-shadow: var(--esx-shadow-md);
+	padding: 22px;
+	font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	color: var(--esx-text);
+}
+.esx-confirm-modal-title {
+	font-size: 16px;
+	font-weight: 700;
+	line-height: 1.3;
+	margin: 0 0 6px;
+	color: var(--esx-text);
+}
+.esx-confirm-modal-text {
+	font-size: 13.5px;
+	line-height: 1.5;
+	color: var(--esx-text-muted);
+	margin: 0 0 18px;
+}
+.esx-confirm-modal-actions {
+	display: flex;
+	gap: 10px;
+	justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+	.esx-notice { flex-direction: column; }
+	.esx-notice-actions { margin-top: 10px; }
 }

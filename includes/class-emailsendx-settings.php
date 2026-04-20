@@ -133,9 +133,49 @@ class EmailSendX_Settings {
 		// Checkbox: present + truthy = on, absent = off.
 		$out['auto_sync'] = ! empty( $input['auto_sync'] );
 
-		if ( array_key_exists( 'sync_role', $input ) ) {
-			$out['sync_role'] = sanitize_key( (string) $input['sync_role'] );
+		// sync_roles (array) — preferred since 1.2.0. Accept either a flat
+		// array of role slugs OR a single `sync_role` string (legacy form).
+		// Validate against installed roles via wp_roles(); drop unknowns;
+		// cap at 20. Also keep `sync_role` (scalar, first item) populated
+		// so legacy callers keep working. ShaonPro.
+		$valid_role_slugs = array();
+		if ( function_exists( 'wp_roles' ) ) {
+			$names = wp_roles()->get_names();
+			if ( is_array( $names ) ) {
+				$valid_role_slugs = array_map( 'strval', array_keys( $names ) );
+			}
 		}
+
+		$roles_in = array();
+		if ( array_key_exists( 'sync_roles', $input ) && is_array( $input['sync_roles'] ) ) {
+			$roles_in = $input['sync_roles'];
+		} elseif ( array_key_exists( 'sync_role', $input ) ) {
+			$raw_single = (string) $input['sync_role'];
+			if ( '' !== $raw_single ) {
+				$roles_in = array( $raw_single );
+			}
+		}
+
+		$roles_clean = array();
+		foreach ( $roles_in as $slug ) {
+			$slug = sanitize_key( (string) $slug );
+			if ( '' === $slug ) {
+				continue;
+			}
+			if ( ! empty( $valid_role_slugs ) && ! in_array( $slug, $valid_role_slugs, true ) ) {
+				continue; // unknown role — drop.
+			}
+			if ( in_array( $slug, $roles_clean, true ) ) {
+				continue;
+			}
+			$roles_clean[] = $slug;
+			if ( count( $roles_clean ) >= 20 ) {
+				break;
+			}
+		}
+
+		$out['sync_roles'] = $roles_clean;
+		$out['sync_role']  = ! empty( $roles_clean ) ? (string) $roles_clean[0] : '';
 
 		// Reset the API singleton so the next call uses the new creds.
 		if ( class_exists( 'EmailSendX_API' ) && method_exists( 'EmailSendX_API', 'reset_instance' ) ) {
@@ -170,14 +210,18 @@ class EmailSendX_Settings {
 				$status['message'] = __( 'API client missing test_connection(). Update the plugin.', 'emailsendx-sync' );
 			} else {
 				$result = $api->test_connection();
-				if ( is_wp_error( $result ) ) {
-					$status['ok']      = false;
-					$status['message'] = $result->get_error_message();
-				} else {
+				if ( ! is_array( $result ) ) {
+					$status['message'] = __( 'Unexpected response from API client.', 'emailsendx-sync' );
+				} elseif ( ! empty( $result['ok'] ) ) {
 					$status['ok']      = true;
-					$status['message'] = is_array( $result ) && isset( $result['message'] )
+					$status['message'] = isset( $result['message'] )
 						? (string) $result['message']
 						: __( 'Connected to EmailSendX successfully.', 'emailsendx-sync' );
+				} else {
+					$status['ok']      = false;
+					$status['message'] = isset( $result['message'] )
+						? (string) $result['message']
+						: __( 'Connection failed.', 'emailsendx-sync' );
 				}
 			}
 		}

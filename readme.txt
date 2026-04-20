@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, woocommerce, sync, contacts, customers, crm
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -86,6 +86,9 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.2.1 =
+* Maintenance release; plugin header and readme stable tag aligned on version 1.2.1.
+
 = 1.1.0 =
 * Sync tab redesigned around a single hero CTA — pick a source, pick a list, push contacts in one click.
 * Segmented source picker (WP Users / WooCommerce Customers) with live counts.
@@ -103,6 +106,9 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.2.1 =
+Recommended update; version metadata and release notes refreshed.
 
 = 1.1.0 =
 Redesigned Sync tab puts the import action front and center; Settings page is now compact and premium.

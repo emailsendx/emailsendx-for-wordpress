@@ -42,7 +42,23 @@ class EmailSendX_Source_WooCommerce {
 	}
 
 	/**
-	 * Total customer count (users with the `customer` role).
+	 * Cache of the unique-email customer set built by build_customer_map().
+	 * Keyed by a hash of the call args so repeated page iterations inside
+	 * a single request don't re-scan orders. ShaonPro.
+	 *
+	 * @var array<string,array>|null
+	 */
+	protected static $customer_map_cache = null;
+
+	/**
+	 * 60-second transient key for the count_total() value.
+	 */
+	const COUNT_TRANS = 'emailsendx_wc_customer_count';
+
+	/**
+	 * Total customer count — unique emails from paid orders (HPOS-aware)
+	 * plus users with role=customer. Cached in a 60s transient to avoid
+	 * repeated heavy queries during polling.
 	 *
 	 * @param array $args Unused, kept for signature parity.
 	 * @return int
@@ -53,15 +69,56 @@ class EmailSendX_Source_WooCommerce {
 			return 0;
 		}
 
-		$counts = count_users();
-		if ( ! is_array( $counts ) || empty( $counts['avail_roles']['customer'] ) ) {
-			return 0;
+		$cached = get_transient( self::COUNT_TRANS );
+		if ( false !== $cached ) {
+			return (int) $cached;
 		}
-		return (int) $counts['avail_roles']['customer'];
+
+		global $wpdb;
+		$count = 0;
+
+		if ( self::hpos_enabled() ) {
+			// HPOS: dedicated orders table. ShaonPro.
+			$table = $wpdb->prefix . 'wc_orders';
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$count = (int) $wpdb->get_var(
+				"SELECT COUNT(DISTINCT LOWER(billing_email))
+				 FROM {$table}
+				 WHERE billing_email <> ''
+				   AND status IN ('wc-completed','wc-processing','wc-on-hold')"
+			);
+		} else {
+			// Legacy: postmeta `_billing_email` on shop_order CPT.
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			$count = (int) $wpdb->get_var(
+				"SELECT COUNT(DISTINCT LOWER(pm.meta_value))
+				 FROM {$wpdb->postmeta} pm
+				 INNER JOIN {$wpdb->posts} p ON p.ID = pm.post_id
+				 WHERE pm.meta_key = '_billing_email'
+				   AND pm.meta_value <> ''
+				   AND p.post_type = 'shop_order'
+				   AND p.post_status IN ('wc-completed','wc-processing','wc-on-hold')"
+			);
+		}
+
+		// Also count any customer-role users with no order (edge case).
+		$user_counts = count_users();
+		if ( is_array( $user_counts ) && ! empty( $user_counts['avail_roles']['customer'] ) ) {
+			// Can't cheaply dedupe without loading emails, so take max —
+			// the build_customer_map() pass will give the true unique set.
+			$count = max( $count, (int) $user_counts['avail_roles']['customer'] );
+		}
+
+		set_transient( self::COUNT_TRANS, $count, 60 );
+
+		return $count;
 	}
 
 	/**
-	 * One page of customers, enriched with WC data.
+	 * One page of customers, enriched with WC data. Pulls from the full
+	 * unique-email customer map (paid-order emails + customer-role users)
+	 * and slices a page at a time. Guests (no user) surface with
+	 * `user_id=0`. ShaonPro.
 	 *
 	 * @param int   $page     1-indexed.
 	 * @param int   $per_page Page size.
@@ -77,61 +134,245 @@ class EmailSendX_Source_WooCommerce {
 		$page     = max( 1, (int) $page );
 		$per_page = max( 1, min( 500, (int) $per_page ) );
 
-		$query = new WP_User_Query(
-			array(
-				'role'    => 'customer',
-				'number'  => $per_page,
-				'paged'   => $page,
-				'orderby' => 'ID',
-				'order'   => 'ASC',
-				'fields'  => 'all',
-			)
-		);
-
-		$users = (array) $query->get_results();
-		if ( empty( $users ) ) {
+		$map = $this->build_customer_map();
+		if ( empty( $map ) ) {
 			return array();
 		}
 
-		// Prime meta cache for the whole page in one query. ShaonPro.
-		$user_ids = array();
-		foreach ( $users as $u ) {
-			if ( $u instanceof WP_User ) {
-				$user_ids[] = (int) $u->ID;
-			}
+		$offset = ( $page - 1 ) * $per_page;
+		if ( $offset >= count( $map ) ) {
+			return array();
 		}
-		if ( ! empty( $user_ids ) ) {
-			update_meta_cache( 'user', $user_ids );
-		}
+
+		$slice = array_slice( $map, $offset, $per_page );
 
 		$out = array();
-		foreach ( $users as $u ) {
-			if ( ! ( $u instanceof WP_User ) ) {
-				continue;
-			}
-
-			$id       = (int) $u->ID;
-			$all_meta = get_user_meta( $id );
-
-			$row = array(
-				'user_id'         => $id,
-				'user_email'      => (string) $u->user_email,
-				'first_name'      => self::pick_meta( $all_meta, 'first_name' ),
-				'last_name'       => self::pick_meta( $all_meta, 'last_name' ),
-				'billing_company' => self::pick_meta( $all_meta, 'billing_company' ),
-				'billing_phone'   => self::pick_meta( $all_meta, 'billing_phone' ),
-				'billing_country' => self::pick_meta( $all_meta, 'billing_country' ),
-				'billing_city'    => self::pick_meta( $all_meta, 'billing_city' ),
-				'orders_count'    => self::safe_orders_count( $id ),
-				'total_spent'     => self::safe_total_spent( $id ),
-				'last_order_date' => self::safe_last_order_date( $id ),
-				'meta'            => self::extract_billing_meta( $all_meta ),
+		foreach ( $slice as $entry ) {
+			$out[] = array(
+				'user_id'         => (int) ( $entry['user_id'] ?? 0 ),
+				'user_email'      => (string) $entry['email'],
+				'first_name'      => (string) ( $entry['first_name'] ?? '' ),
+				'last_name'       => (string) ( $entry['last_name'] ?? '' ),
+				'billing_company' => (string) ( $entry['billing_company'] ?? '' ),
+				'billing_phone'   => (string) ( $entry['billing_phone'] ?? '' ),
+				'billing_country' => (string) ( $entry['billing_country'] ?? '' ),
+				'billing_city'    => (string) ( $entry['billing_city'] ?? '' ),
+				'orders_count'    => (int) ( $entry['orders_count'] ?? 0 ),
+				'total_spent'     => (float) ( $entry['total_spent'] ?? 0 ),
+				'last_order_date' => isset( $entry['last_order_date'] ) ? (string) $entry['last_order_date'] : null,
+				'meta'            => isset( $entry['meta'] ) && is_array( $entry['meta'] ) ? $entry['meta'] : array(),
 			);
-
-			$out[] = $row;
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Build the unique-email customer map. Walks all paid orders via
+	 * `wc_get_orders()` in chunks (HPOS-safe because we use the high-level
+	 * API which handles HPOS internally), then merges in customer-role
+	 * users that have no orders. Dedupes by lowercased email. ShaonPro.
+	 *
+	 * @return array<int,array> Indexed list of customer entries.
+	 */
+	protected function build_customer_map() {
+		if ( null !== self::$customer_map_cache ) {
+			return self::$customer_map_cache;
+		}
+
+		$map = array(); // email (lowercased) => entry.
+
+		if ( ! function_exists( 'wc_get_orders' ) ) {
+			self::$customer_map_cache = array();
+			return array();
+		}
+
+		$paid_statuses = function_exists( 'wc_get_is_paid_statuses' ) ? wc_get_is_paid_statuses() : array();
+		if ( empty( $paid_statuses ) ) {
+			$paid_statuses = array( 'completed', 'processing' );
+		}
+
+		$chunk    = 200;
+		$offset   = 0;
+		$guard    = 200; // hard cap: 40k orders to prevent runaways.
+		$date_cut = gmdate( 'Y-m-d H:i:s', time() - 2 * YEAR_IN_SECONDS );
+
+		while ( $guard-- > 0 ) {
+			$order_ids = wc_get_orders(
+				array(
+					'limit'        => $chunk,
+					'offset'       => $offset,
+					'return'       => 'ids',
+					'status'       => $paid_statuses,
+					'orderby'      => 'ID',
+					'order'        => 'ASC',
+					'date_created' => '>' . $date_cut,
+				)
+			);
+
+			if ( ! is_array( $order_ids ) || empty( $order_ids ) ) {
+				break;
+			}
+
+			foreach ( $order_ids as $order_id ) {
+				$order = wc_get_order( $order_id );
+				if ( ! $order ) {
+					continue;
+				}
+
+				$email = (string) $order->get_billing_email();
+				if ( '' === $email ) {
+					continue;
+				}
+				$key = strtolower( trim( $email ) );
+				if ( '' === $key || ! is_email( $key ) ) {
+					continue;
+				}
+
+				$user_id = (int) $order->get_user_id();
+				$total   = (float) $order->get_total();
+
+				$created = method_exists( $order, 'get_date_created' ) ? $order->get_date_created() : null;
+				$created_str = null;
+				if ( $created && method_exists( $created, 'date' ) ) {
+					$created_str = (string) $created->date( 'Y-m-d H:i:s' );
+				}
+
+				if ( ! isset( $map[ $key ] ) ) {
+					$map[ $key ] = array(
+						'email'           => $key,
+						'user_id'         => $user_id,
+						'first_name'      => (string) $order->get_billing_first_name(),
+						'last_name'       => (string) $order->get_billing_last_name(),
+						'billing_company' => (string) $order->get_billing_company(),
+						'billing_phone'   => (string) $order->get_billing_phone(),
+						'billing_country' => (string) $order->get_billing_country(),
+						'billing_city'    => (string) $order->get_billing_city(),
+						'orders_count'    => 0,
+						'total_spent'     => 0.0,
+						'last_order_date' => null,
+						'meta'            => array(),
+					);
+				}
+
+				$entry = &$map[ $key ];
+
+				// Prefer the registered user_id if any order carries one.
+				if ( 0 === (int) $entry['user_id'] && $user_id > 0 ) {
+					$entry['user_id'] = $user_id;
+				}
+				$entry['orders_count'] = (int) $entry['orders_count'] + 1;
+				$entry['total_spent']  = (float) $entry['total_spent'] + $total;
+
+				if ( null !== $created_str ) {
+					if ( null === $entry['last_order_date'] || strcmp( $created_str, (string) $entry['last_order_date'] ) > 0 ) {
+						$entry['last_order_date'] = $created_str;
+					}
+				}
+
+				// Lazy: only reach for billing meta if nothing filled the first pass.
+				foreach ( array( 'billing_company', 'billing_phone', 'billing_country', 'billing_city', 'first_name', 'last_name' ) as $k ) {
+					if ( '' === (string) $entry[ $k ] ) {
+						$getter = 'get_billing_' . ( 'first_name' === $k || 'last_name' === $k ? $k : substr( $k, 8 ) );
+						if ( method_exists( $order, $getter ) ) {
+							$entry[ $k ] = (string) $order->{$getter}();
+						}
+					}
+				}
+
+				unset( $entry );
+			}
+
+			if ( count( $order_ids ) < $chunk ) {
+				break;
+			}
+			$offset += $chunk;
+		}
+
+		// Merge in customer-role users with no orders.
+		$user_query = new WP_User_Query(
+			array(
+				'role'   => 'customer',
+				'number' => -1,
+				'fields' => array( 'ID', 'user_email' ),
+			)
+		);
+		$users = (array) $user_query->get_results();
+
+		if ( ! empty( $users ) ) {
+			$user_ids = array();
+			foreach ( $users as $u ) {
+				if ( is_object( $u ) && isset( $u->ID ) ) {
+					$user_ids[] = (int) $u->ID;
+				}
+			}
+			if ( ! empty( $user_ids ) ) {
+				update_meta_cache( 'user', $user_ids );
+			}
+
+			foreach ( $users as $u ) {
+				if ( ! is_object( $u ) || empty( $u->user_email ) ) {
+					continue;
+				}
+				$key = strtolower( trim( (string) $u->user_email ) );
+				if ( '' === $key || ! is_email( $key ) ) {
+					continue;
+				}
+				$uid = (int) $u->ID;
+				$meta = get_user_meta( $uid );
+
+				if ( isset( $map[ $key ] ) ) {
+					// Attach user_id + top up empties from user meta.
+					if ( 0 === (int) $map[ $key ]['user_id'] ) {
+						$map[ $key ]['user_id'] = $uid;
+					}
+					foreach ( array( 'first_name', 'last_name', 'billing_company', 'billing_phone', 'billing_country', 'billing_city' ) as $k ) {
+						if ( '' === (string) $map[ $key ][ $k ] ) {
+							$map[ $key ][ $k ] = self::pick_meta( $meta, $k );
+						}
+					}
+					if ( empty( $map[ $key ]['meta'] ) ) {
+						$map[ $key ]['meta'] = self::extract_billing_meta( $meta );
+					}
+				} else {
+					$map[ $key ] = array(
+						'email'           => $key,
+						'user_id'         => $uid,
+						'first_name'      => self::pick_meta( $meta, 'first_name' ),
+						'last_name'       => self::pick_meta( $meta, 'last_name' ),
+						'billing_company' => self::pick_meta( $meta, 'billing_company' ),
+						'billing_phone'   => self::pick_meta( $meta, 'billing_phone' ),
+						'billing_country' => self::pick_meta( $meta, 'billing_country' ),
+						'billing_city'    => self::pick_meta( $meta, 'billing_city' ),
+						'orders_count'    => 0,
+						'total_spent'     => 0.0,
+						'last_order_date' => null,
+						'meta'            => self::extract_billing_meta( $meta ),
+					);
+				}
+			}
+		}
+
+		$indexed = array_values( $map );
+		self::$customer_map_cache = $indexed;
+		return $indexed;
+	}
+
+	/**
+	 * Is WooCommerce HPOS (custom orders table) enabled?
+	 *
+	 * @return bool
+	 */
+	protected static function hpos_enabled() {
+		if ( class_exists( '\\Automattic\\WooCommerce\\Utilities\\OrderUtil' )
+			&& method_exists( '\\Automattic\\WooCommerce\\Utilities\\OrderUtil', 'custom_orders_table_usage_is_enabled' ) ) {
+			try {
+				return (bool) \Automattic\WooCommerce\Utilities\OrderUtil::custom_orders_table_usage_is_enabled();
+			} catch ( Exception $e ) {
+				return false;
+			}
+		}
+		return false;
 	}
 
 	/**

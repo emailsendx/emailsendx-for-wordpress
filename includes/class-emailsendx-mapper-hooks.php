@@ -117,7 +117,7 @@ class EmailSendX_Mapper_Hooks {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'emailsendx-sync' ) ), 403 );
 		}
-		check_ajax_referer( self::NONCE_AJAX, 'nonce' );
+		check_ajax_referer( self::NONCE_AJAX );
 
 		if ( ! class_exists( 'EmailSendX_API' ) ) {
 			wp_send_json_error( array( 'message' => __( 'API client not available.', 'emailsendx-sync' ) ), 500 );

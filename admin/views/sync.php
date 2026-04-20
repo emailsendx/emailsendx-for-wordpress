@@ -60,25 +60,23 @@ if ( $wc_active ) {
 // ───── Lists for the override picker. ─────
 $lists            = array();
 $selected_label   = '';
-$selected_list_id = $settings['default_list_id'];
-if ( class_exists( 'EmailSendX_API' ) && method_exists( 'EmailSendX_API', 'instance' ) ) {
+$selected_list_id = isset( $settings['default_list_id'] ) ? (string) $settings['default_list_id'] : '';
+if ( class_exists( 'EmailSendX_API' ) && method_exists( 'EmailSendX_API', 'instance' ) && function_exists( 'emailsendx_sync_fetch_all_lists' ) ) {
 	$api = EmailSendX_API::instance();
 	if ( method_exists( $api, 'get_lists' ) ) {
-		$res = $api->get_lists();
-		if ( ! is_wp_error( $res ) && is_array( $res ) ) {
-			$lists = isset( $res['data'] ) && is_array( $res['data'] ) ? $res['data'] : $res;
+		if ( method_exists( 'EmailSendX_API', 'reset_instance' ) ) {
+			EmailSendX_API::reset_instance();
+		}
+		$api   = EmailSendX_API::instance();
+		$fetch = emailsendx_sync_fetch_all_lists( $api );
+		$lists = isset( $fetch['lists'] ) && is_array( $fetch['lists'] ) ? $fetch['lists'] : array();
+		if ( ! isset( $fetch['error'] ) || ! $fetch['error'] instanceof WP_Error ) {
 			foreach ( $lists as $list ) {
-				if ( ! is_array( $list ) ) {
+				if ( ! is_array( $list ) || empty( $list['id'] ) ) {
 					continue;
 				}
-				$lid = '';
-				foreach ( array( 'id', 'list_id', 'uuid' ) as $k ) {
-					if ( ! empty( $list[ $k ] ) ) { $lid = (string) $list[ $k ]; break; }
-				}
-				if ( $lid === $selected_list_id ) {
-					foreach ( array( 'name', 'title', 'label' ) as $k ) {
-						if ( ! empty( $list[ $k ] ) ) { $selected_label = (string) $list[ $k ]; break; }
-					}
+				if ( (string) $list['id'] === $selected_list_id ) {
+					$selected_label = isset( $list['name'] ) ? (string) $list['name'] : '';
 					break;
 				}
 			}
@@ -100,11 +98,44 @@ $default_list_label   = $selected_label !== '' ? $selected_label : $selected_lis
 $has_list             = ( '' !== $selected_list_id );
 
 // Last-sync line for the hero footer.
-$last_sync_human = '';
-$last_sync_count = 0;
-if ( is_array( $summary ) && ! empty( $summary['last_sync_time'] ) ) {
-	$last_sync_human = human_time_diff( (int) $summary['last_sync_time'], current_time( 'timestamp' ) );
-	$last_sync_count = isset( $summary['last_sync_count'] ) ? (int) $summary['last_sync_count'] : 0;
+$last_sync_human   = '';
+$last_sync_count   = 0;
+$last_sync_title   = '';
+$last_sync_time_i  = 0;
+if ( is_array( $summary ) ) {
+	$last_sync_time_i = isset( $summary['last_sync_time'] ) ? (int) $summary['last_sync_time'] : 0;
+	if ( 0 === $last_sync_time_i && ! empty( $summary['last_sync_at'] ) ) {
+		$last_sync_time_i = (int) strtotime( (string) $summary['last_sync_at'] . ' UTC' );
+	}
+	if ( $last_sync_time_i > 0 ) {
+		$last_sync_human = human_time_diff( $last_sync_time_i, current_time( 'timestamp' ) );
+		$last_sync_title = mysql2date(
+			get_option( 'date_format' ) . ' ' . get_option( 'time_format' ),
+			gmdate( 'Y-m-d H:i:s', $last_sync_time_i )
+		);
+		$last_sync_count = isset( $summary['last_sync_count'] ) ? (int) $summary['last_sync_count'] : 0;
+	}
+}
+
+// Roles preselected for the users source filter.
+if ( function_exists( 'emailsendx_sync_get_roles' ) ) {
+	$sync_selected_roles = (array) emailsendx_sync_get_roles();
+} elseif ( isset( $settings['sync_roles'] ) && is_array( $settings['sync_roles'] ) ) {
+	$sync_selected_roles = array_filter( array_map( 'strval', $settings['sync_roles'] ) );
+} elseif ( ! empty( $settings['sync_role'] ) ) {
+	$sync_selected_roles = array( (string) $settings['sync_role'] );
+} else {
+	$sync_selected_roles = array();
+}
+$sync_selected_roles = array_map( 'strval', $sync_selected_roles );
+
+$wp_roles_obj      = function_exists( 'wp_roles' ) ? wp_roles() : null;
+$sync_role_names   = ( $wp_roles_obj && method_exists( $wp_roles_obj, 'get_names' ) ) ? $wp_roles_obj->get_names() : array();
+
+// Recent syncs for the activity strip.
+$recent_rows = array();
+if ( class_exists( 'EmailSendX_Log' ) && method_exists( 'EmailSendX_Log', 'get_recent' ) ) {
+	$recent_rows = (array) EmailSendX_Log::get_recent( 5 );
 }
 ?>
 
@@ -145,7 +176,7 @@ if ( is_array( $summary ) && ! empty( $summary['last_sync_time'] ) ) {
 
 		<div class="esx-hero-opt">
 			<span class="esx-hero-opt-label"><?php echo esc_html__( 'Target list', 'emailsendx-sync' ); ?></span>
-			<select id="esx-list-override" class="esx-select esx-hero-select" name="esx_list_override">
+			<select id="esx-list-override" class="esx-select esx-hero-select" name="esx_list_override" autocomplete="off" data-lpignore="true"<?php echo empty( $lists ) ? ' data-esx-lists-stale="1"' : ''; ?>>
 				<?php if ( $has_list ) : ?>
 					<option value=""><?php
 						/* translators: %s: default list name */
@@ -155,22 +186,40 @@ if ( is_array( $summary ) && ! empty( $summary['last_sync_time'] ) ) {
 					<option value=""><?php echo esc_html__( '— Pick a list —', 'emailsendx-sync' ); ?></option>
 				<?php endif; ?>
 				<?php foreach ( $lists as $list ) :
-					if ( ! is_array( $list ) ) { continue; }
-					$lid   = '';
-					$lname = '';
-					foreach ( array( 'id', 'list_id', 'uuid' ) as $k ) {
-						if ( ! empty( $list[ $k ] ) ) { $lid = (string) $list[ $k ]; break; }
+					if ( ! is_array( $list ) || empty( $list['id'] ) ) {
+						continue;
 					}
-					foreach ( array( 'name', 'title', 'label' ) as $k ) {
-						if ( ! empty( $list[ $k ] ) ) { $lname = (string) $list[ $k ]; break; }
-					}
-					if ( '' === $lid ) { continue; }
+					$lid   = (string) $list['id'];
+					$lname = isset( $list['name'] ) ? (string) $list['name'] : $lid;
 					?>
-					<option value="<?php echo esc_attr( $lid ); ?>"><?php echo esc_html( $lname !== '' ? $lname : $lid ); ?></option>
+					<option value="<?php echo esc_attr( $lid ); ?>"><?php echo esc_html( $lname ); ?></option>
 				<?php endforeach; ?>
 			</select>
 		</div>
 	</div>
+
+	<?php if ( ! empty( $sync_role_names ) ) : ?>
+		<div class="esx-hero-opt esx-hero-opt-roles" id="esx-sync-roles-row">
+			<span class="esx-hero-opt-label"><?php echo esc_html__( 'Filter by role', 'emailsendx-sync' ); ?></span>
+			<div class="esx-chipset esx-chipset-compact" role="group" aria-label="<?php echo esc_attr__( 'Filter by role', 'emailsendx-sync' ); ?>">
+				<?php foreach ( $sync_role_names as $role_slug => $role_label ) :
+					$role_slug_str = (string) $role_slug;
+					$is_checked    = in_array( $role_slug_str, $sync_selected_roles, true );
+					?>
+					<label class="esx-chip<?php echo $is_checked ? ' is-selected' : ''; ?>" data-role="<?php echo esc_attr( $role_slug_str ); ?>">
+						<input
+							type="checkbox"
+							name="esx_sync_roles[]"
+							value="<?php echo esc_attr( $role_slug_str ); ?>"
+							<?php checked( $is_checked ); ?>
+						/>
+						<span class="esx-chip-label"><?php echo esc_html( translate_user_role( $role_label ) ); ?></span>
+					</label>
+				<?php endforeach; ?>
+			</div>
+			<p class="esx-help"><?php echo esc_html__( 'Only sync users with one of these roles. Leave empty to sync all.', 'emailsendx-sync' ); ?></p>
+		</div>
+	<?php endif; ?>
 
 	<button
 		type="button"
@@ -205,9 +254,37 @@ if ( is_array( $summary ) && ! empty( $summary['last_sync_time'] ) ) {
 	<div id="esx-sync-result" class="esx-pill" hidden></div>
 	<div id="esx-sync-progress" class="esx-sync-progress" aria-live="polite"></div>
 
+	<div class="esx-progress-shell" id="esx-progress-shell" hidden aria-live="polite">
+		<div class="esx-progress-head">
+			<span class="esx-progress-phase" data-esx-progress-phase></span>
+			<span class="esx-progress-percent" data-esx-progress-percent>0%</span>
+		</div>
+		<div class="esx-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+			<div class="esx-progress-bar-fill" data-esx-progress-fill style="width:0%;"></div>
+		</div>
+		<div class="esx-progress-stats">
+			<div class="esx-stat">
+				<span class="esx-stat-label"><?php echo esc_html__( 'Processed', 'emailsendx-sync' ); ?></span>
+				<span class="esx-stat-value" data-esx-progress-processed>0</span>
+			</div>
+			<div class="esx-stat">
+				<span class="esx-stat-label"><?php echo esc_html__( 'Created', 'emailsendx-sync' ); ?></span>
+				<span class="esx-stat-value" data-esx-progress-created>0</span>
+			</div>
+			<div class="esx-stat">
+				<span class="esx-stat-label"><?php echo esc_html__( 'Updated', 'emailsendx-sync' ); ?></span>
+				<span class="esx-stat-value" data-esx-progress-updated>0</span>
+			</div>
+			<div class="esx-stat">
+				<span class="esx-stat-label"><?php echo esc_html__( 'Failed', 'emailsendx-sync' ); ?></span>
+				<span class="esx-stat-value" data-esx-progress-failed>0</span>
+			</div>
+		</div>
+	</div>
+
 	<div class="esx-hero-foot">
 		<?php if ( $last_sync_human ) : ?>
-			<span class="esx-hero-status">
+			<span class="esx-hero-status" title="<?php echo esc_attr( $last_sync_title ); ?>">
 				<span class="esx-hero-status-dot" aria-hidden="true"></span>
 				<?php
 				printf(
@@ -262,6 +339,67 @@ if ( is_array( $summary ) && ! empty( $summary['last_sync_time'] ) ) {
 		</div>
 	</form>
 </details>
+
+<?php if ( ! empty( $recent_rows ) ) : ?>
+	<div class="esx-card esx-card-compact esx-recent-strip">
+		<div class="esx-card-head esx-recent-head">
+			<h2 class="esx-card-title"><?php echo esc_html__( 'Recent syncs', 'emailsendx-sync' ); ?></h2>
+			<a class="esx-link" href="<?php echo esc_url( EmailSendX_Admin::get_admin_url( 'log' ) ); ?>">
+				<?php echo esc_html__( 'View all →', 'emailsendx-sync' ); ?>
+			</a>
+		</div>
+		<ul class="esx-activity esx-activity-mini">
+			<?php foreach ( $recent_rows as $row ) :
+				$row_arr = (array) $row;
+				$status  = isset( $row_arr['status'] ) ? strtolower( (string) $row_arr['status'] ) : 'ok';
+				switch ( $status ) {
+					case 'error':
+					case 'failed':
+						$icon_class = 'esx-activity-icon-error';
+						$icon_svg   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm3.54 13.54a1 1 0 01-1.42 1.42L12 14.83l-2.12 2.13a1 1 0 11-1.42-1.42L10.59 13.4 8.46 11.3a1 1 0 011.42-1.42L12 12l2.12-2.12a1 1 0 011.42 1.42L13.41 13.4l2.13 2.14z" fill="currentColor"/></svg>';
+						break;
+					case 'warn':
+					case 'warning':
+					case 'partial':
+						$icon_class = 'esx-activity-icon-warn';
+						$icon_svg   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2L1 21h22L12 2zm0 6l7.53 13H4.47L12 8zm-1 4v4h2v-4h-2zm0 6v2h2v-2h-2z" fill="currentColor"/></svg>';
+						break;
+					case 'api_call':
+					case 'info':
+						$icon_class = 'esx-activity-icon-info';
+						$icon_svg   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0012 4V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4a8 8 0 1013.65-6.65z" fill="currentColor"/></svg>';
+						break;
+					default:
+						$icon_class = 'esx-activity-icon-ok';
+						$icon_svg   = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>';
+				}
+
+				$sentence = '';
+				if ( class_exists( 'EmailSendX_Log' ) && method_exists( 'EmailSendX_Log', 'humanize_row' ) ) {
+					$sentence = (string) EmailSendX_Log::humanize_row( $row_arr );
+				}
+				if ( '' === $sentence ) {
+					$sentence = isset( $row_arr['source'] ) ? (string) $row_arr['source'] : __( 'Sync run', 'emailsendx-sync' );
+				}
+
+				$created_at = isset( $row_arr['created_at'] ) ? (string) $row_arr['created_at'] : '';
+				$when_ts    = $created_at ? (int) strtotime( $created_at . ' UTC' ) : 0;
+				$when_rel   = $when_ts > 0 ? human_time_diff( $when_ts, current_time( 'timestamp' ) ) . ' ' . __( 'ago', 'emailsendx-sync' ) : '';
+				$when_full  = $created_at ? mysql2date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $created_at ) : '';
+				?>
+				<li class="esx-activity-row">
+					<span class="esx-activity-icon <?php echo esc_attr( $icon_class ); ?>"><?php echo $icon_svg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+					<div class="esx-activity-body">
+						<div class="esx-activity-title"><?php echo esc_html( $sentence ); ?></div>
+						<?php if ( $when_rel ) : ?>
+							<div class="esx-activity-sub" title="<?php echo esc_attr( $when_full ); ?>"><?php echo esc_html( $when_rel ); ?></div>
+						<?php endif; ?>
+					</div>
+				</li>
+			<?php endforeach; ?>
+		</ul>
+	</div>
+<?php endif; ?>
 
 <script type="application/json" id="esx-source-counts">
 <?php echo wp_json_encode( array(

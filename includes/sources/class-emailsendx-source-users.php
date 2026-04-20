@@ -50,24 +50,30 @@ class EmailSendX_Source_Users {
 	);
 
 	/**
-	 * Total user count, optionally filtered by role.
+	 * Total user count, optionally filtered by roles.
 	 *
-	 * @param array $args { role?: string }
+	 * @param array $args { roles?: string[], role?: string (legacy) }
 	 * @return int
 	 */
 	public function count_total( $args = array() ) {
-		$role = isset( $args['role'] ) ? (string) $args['role'] : '';
+		$roles = self::normalize_roles_arg( $args );
 
 		$counts = count_users();
 		if ( ! is_array( $counts ) ) {
 			return 0;
 		}
 
-		if ( '' !== $role ) {
-			if ( isset( $counts['avail_roles'][ $role ] ) ) {
-				return (int) $counts['avail_roles'][ $role ];
+		if ( ! empty( $roles ) ) {
+			$avail = isset( $counts['avail_roles'] ) && is_array( $counts['avail_roles'] )
+				? $counts['avail_roles']
+				: array();
+			$sum = 0;
+			foreach ( $roles as $role ) {
+				if ( isset( $avail[ $role ] ) ) {
+					$sum += (int) $avail[ $role ];
+				}
 			}
-			return 0;
+			return $sum;
 		}
 
 		return isset( $counts['total_users'] ) ? (int) $counts['total_users'] : 0;
@@ -78,13 +84,13 @@ class EmailSendX_Source_Users {
 	 *
 	 * @param int   $page     1-indexed page number.
 	 * @param int   $per_page Page size (default 500).
-	 * @param array $args     { role?: string }
+	 * @param array $args     { roles?: string[], role?: string (legacy) }
 	 * @return array<int,array>
 	 */
 	public function iterate( $page, $per_page = 500, $args = array() ) {
 		$page     = max( 1, (int) $page );
 		$per_page = max( 1, min( 500, (int) $per_page ) );
-		$role     = isset( $args['role'] ) ? (string) $args['role'] : '';
+		$roles    = self::normalize_roles_arg( $args );
 
 		$query_args = array(
 			'number'  => $per_page,
@@ -93,8 +99,8 @@ class EmailSendX_Source_Users {
 			'order'   => 'ASC',
 			'fields'  => 'all', // need the WP_User objects.
 		);
-		if ( '' !== $role ) {
-			$query_args['role'] = $role;
+		if ( ! empty( $roles ) ) {
+			$query_args['role__in'] = $roles;
 		}
 
 		$query = new WP_User_Query( $query_args );
@@ -159,6 +165,32 @@ class EmailSendX_Source_Users {
 	}
 
 	/* ─── Internals ────────────────────────────────────────────────── */
+
+	/**
+	 * Normalise the `roles` / legacy `role` arg into a clean array of
+	 * role slugs. ShaonPro.
+	 *
+	 * @param array $args Iterator args.
+	 * @return array<int,string>
+	 */
+	protected static function normalize_roles_arg( $args ) {
+		$roles = array();
+
+		if ( isset( $args['roles'] ) && is_array( $args['roles'] ) ) {
+			$roles = $args['roles'];
+		} elseif ( isset( $args['role'] ) && '' !== (string) $args['role'] ) {
+			$roles = array( (string) $args['role'] );
+		}
+
+		$out = array();
+		foreach ( $roles as $slug ) {
+			$slug = sanitize_key( (string) $slug );
+			if ( '' !== $slug && ! in_array( $slug, $out, true ) ) {
+				$out[] = $slug;
+			}
+		}
+		return $out;
+	}
 
 	/**
 	 * Flatten the raw `get_user_meta($id)` shape (arrays of arrays) down

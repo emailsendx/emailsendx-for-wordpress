@@ -28,21 +28,48 @@ $lists_error = '';
 
 // Pull lists if we have creds. Defensive — the API class may not be
 // loaded in some recovery scenarios. ShaonPro.
-if ( $is_ready && class_exists( 'EmailSendX_API' ) && method_exists( 'EmailSendX_API', 'instance' ) ) {
+if ( $is_ready && class_exists( 'EmailSendX_API' ) && method_exists( 'EmailSendX_API', 'instance' ) && function_exists( 'emailsendx_sync_fetch_all_lists' ) ) {
 	$api = EmailSendX_API::instance();
 	if ( method_exists( $api, 'get_lists' ) ) {
-		$result = $api->get_lists();
-		if ( is_wp_error( $result ) ) {
-			$lists_error = $result->get_error_message();
-		} elseif ( is_array( $result ) ) {
-			// Accept either a flat array or `['data' => [...]]`.
-			$lists = isset( $result['data'] ) && is_array( $result['data'] ) ? $result['data'] : $result;
+		if ( method_exists( 'EmailSendX_API', 'reset_instance' ) ) {
+			EmailSendX_API::reset_instance();
+		}
+		$api   = EmailSendX_API::instance();
+		$fetch = emailsendx_sync_fetch_all_lists( $api );
+		$lists = isset( $fetch['lists'] ) && is_array( $fetch['lists'] ) ? $fetch['lists'] : array();
+		if ( isset( $fetch['error'] ) && $fetch['error'] instanceof WP_Error ) {
+			$lists_error = $fetch['error']->get_error_message();
 		}
 	}
 }
 
+$list_ids        = array();
+$saved_list_id   = isset( $settings['default_list_id'] ) ? (string) $settings['default_list_id'] : '';
+$missing_saved   = false;
+foreach ( $lists as $lr ) {
+	if ( is_array( $lr ) && ! empty( $lr['id'] ) ) {
+		$list_ids[] = (string) $lr['id'];
+	}
+}
+$list_ids = array_values( array_unique( $list_ids ) );
+if ( '' !== $saved_list_id && ! in_array( $saved_list_id, $list_ids, true ) ) {
+	$missing_saved = true;
+}
+
 $wp_roles_obj = function_exists( 'wp_roles' ) ? wp_roles() : null;
 $role_names   = ( $wp_roles_obj && method_exists( $wp_roles_obj, 'get_names' ) ) ? $wp_roles_obj->get_names() : array();
+
+// Resolve the selected roles array. Prefer the helper; fall back to settings keys.
+if ( function_exists( 'emailsendx_sync_get_roles' ) ) {
+	$selected_roles = (array) emailsendx_sync_get_roles();
+} elseif ( isset( $settings['sync_roles'] ) && is_array( $settings['sync_roles'] ) ) {
+	$selected_roles = array_filter( array_map( 'strval', $settings['sync_roles'] ) );
+} elseif ( ! empty( $settings['sync_role'] ) ) {
+	$selected_roles = array( (string) $settings['sync_role'] );
+} else {
+	$selected_roles = array();
+}
+$selected_roles = array_map( 'strval', $selected_roles );
 
 $has_api_key = ! empty( $settings['api_key'] );
 $masked_key  = $has_api_key
@@ -192,25 +219,41 @@ if ( ! empty( $settings['api_base'] ) ) {
 			<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[api_base]" value="<?php echo esc_attr( $settings['api_base'] ); ?>" />
 			<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" />
 			<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[auto_sync]" value="<?php echo $settings['auto_sync'] ? '1' : '0'; ?>" />
-			<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[sync_role]" value="<?php echo esc_attr( $settings['sync_role'] ); ?>" />
 
-			<select id="esx-default-list" class="esx-select" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[default_list_id]" aria-label="<?php echo esc_attr__( 'Default list', 'emailsendx-sync' ); ?>">
-				<option value=""><?php echo esc_html__( '— Select a list —', 'emailsendx-sync' ); ?></option>
+			<select
+				id="esx-default-list"
+				class="esx-select"
+				name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[default_list_id]"
+				aria-label="<?php echo esc_attr__( 'Default list', 'emailsendx-sync' ); ?>"
+				autocomplete="off"
+				data-lpignore="true"
+				<?php echo ( $is_ready && empty( $lists ) && '' === $lists_error ) ? ' data-esx-lists-stale="1"' : ''; ?>
+			>
+				<option value="" <?php selected( $settings['default_list_id'], '' ); ?>>
+					<?php echo esc_html__( '— Select a list —', 'emailsendx-sync' ); ?>
+				</option>
+				<?php if ( $missing_saved ) : ?>
+					<option value="<?php echo esc_attr( $saved_list_id ); ?>" <?php selected( $settings['default_list_id'], $saved_list_id ); ?>>
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: %s: saved list id that is not in the API response */
+								__( 'Saved list not in workspace — %s (pick a list)', 'emailsendx-sync' ),
+								$saved_list_id
+							)
+						);
+						?>
+					</option>
+				<?php endif; ?>
 				<?php foreach ( $lists as $list ) :
-					$lid   = '';
-					$lname = '';
-					if ( is_array( $list ) ) {
-						foreach ( array( 'id', 'list_id', 'uuid' ) as $k ) {
-							if ( ! empty( $list[ $k ] ) ) { $lid = (string) $list[ $k ]; break; }
-						}
-						foreach ( array( 'name', 'title', 'label' ) as $k ) {
-							if ( ! empty( $list[ $k ] ) ) { $lname = (string) $list[ $k ]; break; }
-						}
+					if ( ! is_array( $list ) || empty( $list['id'] ) ) {
+						continue;
 					}
-					if ( '' === $lid ) { continue; }
+					$lid   = (string) $list['id'];
+					$lname = isset( $list['name'] ) ? (string) $list['name'] : $lid;
 					?>
 					<option value="<?php echo esc_attr( $lid ); ?>" <?php selected( $settings['default_list_id'], $lid ); ?>>
-						<?php echo esc_html( $lname !== '' ? $lname : $lid ); ?>
+						<?php echo esc_html( $lname ); ?>
 					</option>
 				<?php endforeach; ?>
 			</select>
@@ -275,15 +318,24 @@ if ( ! empty( $settings['api_base'] ) ) {
 			</div>
 
 			<div class="esx-field">
-				<label class="esx-label" for="esx-sync-role"><?php echo esc_html__( 'Limit to role', 'emailsendx-sync' ); ?></label>
-				<select id="esx-sync-role" class="esx-select" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[sync_role]">
-					<option value=""><?php echo esc_html__( 'All roles', 'emailsendx-sync' ); ?></option>
-					<?php foreach ( $role_names as $role_slug => $role_label ) : ?>
-						<option value="<?php echo esc_attr( $role_slug ); ?>" <?php selected( $settings['sync_role'], $role_slug ); ?>>
-							<?php echo esc_html( translate_user_role( $role_label ) ); ?>
-						</option>
+				<span class="esx-label"><?php echo esc_html__( 'Limit to roles', 'emailsendx-sync' ); ?></span>
+				<div class="esx-chipset" role="group" aria-label="<?php echo esc_attr__( 'Limit to roles', 'emailsendx-sync' ); ?>">
+					<?php foreach ( $role_names as $role_slug => $role_label ) :
+						$role_slug_str = (string) $role_slug;
+						$is_checked    = in_array( $role_slug_str, $selected_roles, true );
+						?>
+						<label class="esx-chip<?php echo $is_checked ? ' is-selected' : ''; ?>">
+							<input
+								type="checkbox"
+								name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[sync_roles][]"
+								value="<?php echo esc_attr( $role_slug_str ); ?>"
+								<?php checked( $is_checked ); ?>
+							/>
+							<span class="esx-chip-label"><?php echo esc_html( translate_user_role( $role_label ) ); ?></span>
+						</label>
 					<?php endforeach; ?>
-				</select>
+				</div>
+				<p class="esx-help"><?php echo esc_html__( 'Only push users who have one of these roles. Leave empty to sync all roles.', 'emailsendx-sync' ); ?></p>
 			</div>
 		</div>
 

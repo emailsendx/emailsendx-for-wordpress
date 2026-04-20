@@ -179,7 +179,7 @@ class EmailSendX_API {
 	/**
 	 * POST /api/v1/contacts/bulk.
 	 *
-	 * @param array $args { listId?, createListIfMissing?, listName?, contacts[] }
+	 * @param array $args { listId?, createListIfMissing?, listName?, consentSource?, contacts[] }
 	 * @return array|WP_Error
 	 */
 	public function bulk_upsert_contacts( $args ) {
@@ -207,6 +207,9 @@ class EmailSendX_API {
 		}
 		if ( ! empty( $args['listName'] ) ) {
 			$body['listName'] = (string) $args['listName'];
+		}
+		if ( ! empty( $args['consentSource'] ) ) {
+			$body['consentSource'] = sanitize_text_field( (string) $args['consentSource'] );
 		}
 
 		return $this->request( 'POST', '/api/v1/contacts/bulk', $body );
@@ -334,14 +337,31 @@ class EmailSendX_API {
 		// 429 — surface Retry-After so callers can back off. ShaonPro.
 		if ( 429 === $status ) {
 			$retry_after = (int) wp_remote_retrieve_header( $response, 'retry-after' );
+			$retry_after = $retry_after > 0 ? $retry_after : 60;
 			$this->log_call( $method, $path, $status, $elapsed, 'rate limited' );
+			$this->notify_rate_limit( $retry_after );
 			return new WP_Error(
 				'emailsendx_api',
 				__( 'Rate limited by EmailSendX API.', 'emailsendx-sync' ),
 				array(
 					'status'      => 429,
 					'body'        => $raw_body,
-					'retry_after' => $retry_after > 0 ? $retry_after : 60,
+					'retry_after' => $retry_after,
+				)
+			);
+		}
+
+		// 401 — credentials rejected.  Surface a persistent global notice.
+		if ( 401 === $status ) {
+			$message = $this->extract_error_message( $raw_body, $status );
+			$this->log_call( $method, $path, $status, $elapsed, $message );
+			$this->notify_unauthorized();
+			return new WP_Error(
+				'emailsendx_api',
+				$message,
+				array(
+					'status' => $status,
+					'body'   => $raw_body,
 				)
 			);
 		}
@@ -359,6 +379,9 @@ class EmailSendX_API {
 				)
 			);
 		}
+
+		// 2xx path — clear any stale auth/rate-limit notices. ShaonPro.
+		$this->clear_transient_notices();
 
 		// Empty body on a 2xx is OK (e.g. 204 No Content) — return [].
 		if ( '' === $raw_body ) {
@@ -435,5 +458,79 @@ class EmailSendX_API {
 				'message'     => $message,
 			)
 		);
+	}
+
+	/**
+	 * Emit the `api_unauthorized` admin notice. Persistent + global scope
+	 * so admins see it everywhere until credentials are fixed. ShaonPro.
+	 *
+	 * @return void
+	 */
+	protected function notify_unauthorized() {
+		if ( ! class_exists( 'EmailSendX_Notices' ) ) {
+			return;
+		}
+
+		$reconnect_url = class_exists( 'EmailSendX_Admin' )
+			? EmailSendX_Admin::get_admin_url( 'settings' )
+			: admin_url( 'admin.php' );
+
+		EmailSendX_Notices::add(
+			'api_unauthorized',
+			'error',
+			__( 'EmailSendX API rejected your key. Reconnect to restore sync.', 'emailsendx-sync' ),
+			array(
+				'scope'   => 'global',
+				'ttl'     => 0,
+				'actions' => array(
+					array(
+						'label' => __( 'Reconnect', 'emailsendx-sync' ),
+						'url'   => $reconnect_url,
+					),
+				),
+			)
+		);
+	}
+
+	/**
+	 * Emit the `api_rate_limit` admin notice with a live countdown hint.
+	 *
+	 * @param int $retry_after Seconds until retry.
+	 * @return void
+	 */
+	protected function notify_rate_limit( $retry_after ) {
+		if ( ! class_exists( 'EmailSendX_Notices' ) ) {
+			return;
+		}
+
+		$retry_after = max( 1, (int) $retry_after );
+
+		EmailSendX_Notices::add(
+			'api_rate_limit',
+			'warning',
+			sprintf(
+				/* translators: %d: seconds until the next API attempt is allowed. */
+				__( 'Rate-limited by EmailSendX. Next attempt available in %ds.', 'emailsendx-sync' ),
+				$retry_after
+			),
+			array(
+				'ttl'  => $retry_after + 30,
+				'meta' => array( 'retry_after' => $retry_after ),
+			)
+		);
+	}
+
+	/**
+	 * On any successful 2xx response, dismiss the auth + rate-limit notices
+	 * so the UI stops nagging as soon as things recover. ShaonPro.
+	 *
+	 * @return void
+	 */
+	protected function clear_transient_notices() {
+		if ( ! class_exists( 'EmailSendX_Notices' ) ) {
+			return;
+		}
+		EmailSendX_Notices::clear( 'api_unauthorized' );
+		EmailSendX_Notices::clear( 'api_rate_limit' );
 	}
 }

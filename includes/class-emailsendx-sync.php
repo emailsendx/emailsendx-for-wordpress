@@ -98,8 +98,19 @@ class EmailSendX_Sync {
 				'list_name' => null,
 				'trigger'   => 'manual',
 				'limit'     => null,
+				'run_id'    => '',
 			)
 		);
+
+		// Run id — generate if the caller didn't supply one. ShaonPro.
+		$run_id = isset( $args['run_id'] ) ? (string) $args['run_id'] : '';
+		if ( '' === $run_id ) {
+			$run_id = function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : uniqid( 'esx_', true );
+		}
+		$args['run_id'] = $run_id;
+
+		$source_slug  = (string) $args['source'];
+		$source_label = self::resolve_source_label( $source_slug );
 
 		$result = array(
 			'ok'            => false,
@@ -114,6 +125,7 @@ class EmailSendX_Sync {
 			'duration_ms'   => 0,
 			'list_id'       => null,
 			'errors'        => array(),
+			'run_id'        => $run_id,
 		);
 
 		// Configured?  ShaonPro.
@@ -163,12 +175,14 @@ class EmailSendX_Sync {
 			self::write_status(
 				array(
 					'phase'         => 'running',
-					'source'        => (string) $args['source'],
+					'source'        => $source_slug,
+					'source_label'  => $source_label,
 					'list_id'       => $list_id,
 					'batches_done'  => 0,
 					'batches_total' => $batches_total,
 					'totals'        => $result['totals'],
 					'started_at'    => time(),
+					'run_id'        => $run_id,
 				)
 			);
 
@@ -211,12 +225,14 @@ class EmailSendX_Sync {
 				self::write_status(
 					array(
 						'phase'         => 'running',
-						'source'        => (string) $args['source'],
+						'source'        => $source_slug,
+						'source_label'  => $source_label,
 						'list_id'       => $list_id,
 						'batches_done'  => $result['batches_done'],
 						'batches_total' => max( $batches_total, $result['batches_done'] ),
 						'totals'        => $result['totals'],
 						'started_at'    => time(),
+						'run_id'        => $run_id,
 					)
 				);
 
@@ -245,8 +261,9 @@ class EmailSendX_Sync {
 
 		self::write_status(
 			array(
-				'phase'         => 'done',
-				'source'        => (string) $args['source'],
+				'phase'         => $result['ok'] ? 'done' : 'failed',
+				'source'        => $source_slug,
+				'source_label'  => $source_label,
 				'list_id'       => $result['list_id'],
 				'batches_done'  => $result['batches_done'],
 				'batches_total' => max( $result['batches_total'], $result['batches_done'] ),
@@ -254,13 +271,107 @@ class EmailSendX_Sync {
 				'started_at'    => time(),
 				'duration_ms'   => $result['duration_ms'],
 				'ok'            => $result['ok'],
+				'run_id'        => $run_id,
 			),
 			60
 		);
 
 		self::log_run( $args, $result );
 
+		// Emit admin notices summarising the run. ShaonPro.
+		self::emit_run_notices( $result );
+
 		return $result;
+	}
+
+	/**
+	 * Map the final run envelope to an admin notice. Always clears prior
+	 * sync_* notices first so consecutive runs don't stack. ShaonPro.
+	 *
+	 * @param array $result Run envelope.
+	 * @return void
+	 */
+	protected static function emit_run_notices( $result ) {
+		if ( ! class_exists( 'EmailSendX_Notices' ) ) {
+			return;
+		}
+
+		EmailSendX_Notices::clear_all_matching( 'sync_' );
+
+		$totals  = is_array( $result['totals'] ?? null ) ? $result['totals'] : array();
+		$created = (int) ( $totals['created'] ?? 0 );
+		$updated = (int) ( $totals['updated'] ?? 0 );
+		$failed  = (int) ( $totals['failed']  ?? 0 );
+		$skipped = (int) ( $totals['skipped'] ?? 0 );
+		$ok      = ! empty( $result['ok'] );
+
+		$log_url = class_exists( 'EmailSendX_Admin' )
+			? EmailSendX_Admin::get_admin_url( 'log' )
+			: '';
+
+		$view_log_action = '' !== $log_url
+			? array( array( 'label' => __( 'View log', 'emailsendx-sync' ), 'url' => $log_url ) )
+			: array();
+
+		if ( $skipped >= 3 ) {
+			EmailSendX_Notices::add(
+				'sync_duplicates',
+				'info',
+				sprintf(
+					/* translators: %d: number of existing contacts updated instead of duplicated. */
+					__( 'Great — updated %d existing contacts instead of creating duplicates.', 'emailsendx-sync' ),
+					$skipped
+				),
+				array( 'ttl' => 1800 )
+			);
+			return;
+		}
+
+		if ( $failed > 0 && ( $created + $updated ) > 0 ) {
+			EmailSendX_Notices::add(
+				'sync_partial',
+				'warning',
+				sprintf(
+					/* translators: %d: number of failed contacts. */
+					_n(
+						'Sync finished with %d failure. See log for details.',
+						'Sync finished with %d failures. See log for details.',
+						$failed,
+						'emailsendx-sync'
+					),
+					$failed
+				),
+				array( 'actions' => $view_log_action )
+			);
+			return;
+		}
+
+		if ( $failed > 0 && ( $created + $updated ) === 0 ) {
+			EmailSendX_Notices::add(
+				'sync_failed',
+				'error',
+				sprintf(
+					/* translators: %d: number of contacts not pushed. */
+					__( 'Sync failed — %d contacts not pushed.', 'emailsendx-sync' ),
+					$failed
+				),
+				array( 'actions' => $view_log_action, 'ttl' => 0 )
+			);
+			return;
+		}
+
+		if ( $ok && ( $created + $updated ) > 0 ) {
+			EmailSendX_Notices::add(
+				'sync_success',
+				'success',
+				sprintf(
+					/* translators: %d: contacts synced. */
+					__( 'Synced %d contacts.', 'emailsendx-sync' ),
+					$created + $updated
+				),
+				array( 'ttl' => 300 )
+			);
+		}
 	}
 
 	/**
@@ -489,14 +600,104 @@ class EmailSendX_Sync {
 	}
 
 	/**
-	 * Persist the live status transient. 5-minute expiry by default.
+	 * Persist the live status transient. Enriches the payload with
+	 * `phase_label`, `updated_at`, `percent` and `source_label` so the
+	 * admin UI can render a progress bar without re-computing. 5-minute
+	 * expiry by default. ShaonPro.
 	 *
 	 * @param array $payload Status payload.
 	 * @param int   $ttl     Seconds.
 	 * @return void
 	 */
 	protected static function write_status( $payload, $ttl = 300 ) {
+		if ( ! is_array( $payload ) ) {
+			$payload = array();
+		}
+
+		$phase = isset( $payload['phase'] ) ? (string) $payload['phase'] : '';
+
+		$payload['phase_label']  = self::phase_label_for( $phase );
+		$payload['updated_at']   = time();
+
+		if ( ! isset( $payload['source_label'] ) || '' === (string) $payload['source_label'] ) {
+			$slug = isset( $payload['source'] ) ? (string) $payload['source'] : '';
+			$payload['source_label'] = self::resolve_source_label( $slug );
+		}
+
+		$payload['percent'] = self::percent_for( $phase, $payload );
+
 		set_transient( EMAILSENDX_SYNC_STATUS_TRANS, $payload, (int) $ttl );
+	}
+
+	/**
+	 * Localized human-facing label for a run phase. ShaonPro.
+	 *
+	 * @param string $phase Phase slug.
+	 * @return string
+	 */
+	protected static function phase_label_for( $phase ) {
+		switch ( $phase ) {
+			case 'queued':
+				return __( 'Queued', 'emailsendx-sync' );
+			case 'running':
+				return __( 'Syncing…', 'emailsendx-sync' );
+			case 'done':
+				return __( 'Done', 'emailsendx-sync' );
+			case 'failed':
+				return __( 'Failed', 'emailsendx-sync' );
+			default:
+				return __( 'Syncing…', 'emailsendx-sync' );
+		}
+	}
+
+	/**
+	 * Compute a 0–100 integer percent for the progress bar.
+	 *
+	 * @param string $phase   Phase slug.
+	 * @param array  $payload Status payload (batches_done/batches_total).
+	 * @return int
+	 */
+	protected static function percent_for( $phase, $payload ) {
+		if ( 'queued' === $phase ) {
+			return 5;
+		}
+		if ( 'done' === $phase ) {
+			return 100;
+		}
+		if ( 'failed' === $phase ) {
+			$done  = (int) ( $payload['batches_done']  ?? 0 );
+			$total = (int) ( $payload['batches_total'] ?? 0 );
+			if ( $total <= 0 ) {
+				return 0;
+			}
+			return (int) max( 0, min( 100, round( ( $done / $total ) * 100 ) ) );
+		}
+
+		// running / unknown.
+		$done  = (int) ( $payload['batches_done']  ?? 0 );
+		$total = (int) ( $payload['batches_total'] ?? 0 );
+		if ( $total <= 0 ) {
+			return $done > 0 ? 50 : 10;
+		}
+		return (int) max( 1, min( 99, round( ( $done / $total ) * 100 ) ) );
+	}
+
+	/**
+	 * Localized human-facing label for a source slug.
+	 *
+	 * @param string $slug Source slug (users / woocommerce / etc).
+	 * @return string
+	 */
+	public static function resolve_source_label( $slug ) {
+		$slug = is_string( $slug ) ? strtolower( trim( $slug ) ) : '';
+		switch ( $slug ) {
+			case 'users':
+				return __( 'WordPress users', 'emailsendx-sync' );
+			case 'woocommerce':
+				return __( 'WooCommerce customers', 'emailsendx-sync' );
+			default:
+				return '' === $slug ? __( 'Sync', 'emailsendx-sync' ) : ucfirst( $slug );
+		}
 	}
 
 	/**
@@ -514,17 +715,33 @@ class EmailSendX_Sync {
 			return;
 		}
 
+		$totals = is_array( $result['totals'] ?? null ) ? $result['totals'] : array();
+		$created = (int) ( $totals['created'] ?? 0 );
+		$updated = (int) ( $totals['updated'] ?? 0 );
+		$failed  = (int) ( $totals['failed']  ?? 0 );
+		$skipped = (int) ( $totals['skipped'] ?? 0 );
+
 		EmailSendX_Log::record_sync_run(
 			array(
-				'source'        => (string) ( $args['source'] ?? '' ),
-				'trigger'       => (string) ( $args['trigger'] ?? 'manual' ),
-				'list_id'       => (string) ( $result['list_id'] ?? '' ),
-				'ok'            => (bool) $result['ok'],
-				'totals'        => $result['totals'],
-				'batches_done'  => (int) $result['batches_done'],
-				'batches_total' => (int) $result['batches_total'],
-				'duration_ms'   => (int) $result['duration_ms'],
-				'errors'        => $result['errors'],
+				'source'           => (string) ( $args['source'] ?? '' ),
+				'list_id'          => (string) ( $result['list_id'] ?? '' ),
+				'status'           => ! empty( $result['ok'] ) ? 'ok' : 'failed',
+				'contacts_total'   => $created + $updated + $failed + $skipped,
+				'contacts_created' => $created,
+				'contacts_updated' => $updated,
+				'contacts_failed'  => $failed,
+				'duration_ms'      => (int) $result['duration_ms'],
+				'message'          => ! empty( $result['errors'] ) && is_array( $result['errors'] )
+					? (string) reset( $result['errors'] )
+					: '',
+				'context'          => array(
+					'trigger'       => (string) ( $args['trigger'] ?? 'manual' ),
+					'run_id'        => (string) ( $result['run_id'] ?? '' ),
+					'batches_done'  => (int) $result['batches_done'],
+					'batches_total' => (int) $result['batches_total'],
+					'totals'        => $totals,
+					'errors'        => is_array( $result['errors'] ?? null ) ? $result['errors'] : array(),
+				),
 			)
 		);
 	}

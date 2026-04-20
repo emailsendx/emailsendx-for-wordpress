@@ -48,25 +48,22 @@ class EmailSendX_Admin {
 	 */
 	public function __construct() {
 		add_action( 'admin_menu',            array( $this, 'register_menu' ) );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_menu_assets' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 	}
 
 	/**
 	 * Register the top-level admin menu.
 	 *
-	 * The menu icon is the EmailSendX envelope mark, encoded inline as
-	 * a base64 SVG so it picks up WordPress' own admin colour scheme
-	 * (currentColor → matches the admin sidebar's hover/active states
-	 * automatically). ShaonPro.
+	 * Icon is a base64 SVG using EmailSendX brand blues (logo only — the
+	 * menu label keeps WordPress' native colours). ShaonPro.
 	 */
 	public function register_menu() {
-		// EmailSendX brand mark (the "lightning arrow" glyph), monochrome
-		// via currentColor so WP can recolour it to match the user's admin
-		// scheme. Path is the same one used in the full-colour brand SVG,
-		// just stripped of its rounded-square background since WP gives
-		// the menu icon its own pill on hover/active. ShaonPro.
-		$icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250" fill="currentColor">'
-			. '<path d="M129.067 53.9333C131.283 51.7168 134.288 50.4701 137.42 50.4673C140.551 50.4645 143.554 51.706 145.766 53.9185L195.821 103.973C198.033 106.186 199.275 109.188 199.272 112.32C199.269 115.451 198.022 118.456 195.806 120.673L128.949 187.53C126.732 189.746 123.728 190.993 120.596 190.996C117.464 190.998 114.462 189.757 112.249 187.544L108.078 183.373L116.435 175.016L120.606 179.187L187.464 112.33L143.345 68.2113L143.294 126.117C143.291 128.465 142.356 130.718 140.694 132.38C139.032 134.042 136.779 134.977 134.431 134.98L76.4501 135.031L78.8945 137.475L70.5373 145.832L62.1949 137.49C59.9824 135.277 58.7409 132.275 58.7437 129.143C58.7465 126.011 59.9932 123.007 62.2096 120.79L129.067 53.9333ZM108.108 149.974C109.174 148.91 110.605 148.293 112.11 148.248C113.614 148.204 115.077 148.735 116.201 149.734C117.325 150.733 118.024 152.124 118.156 153.623C118.287 155.122 117.842 156.615 116.91 157.798L116.45 158.316L95.5572 179.209C94.491 180.273 93.0595 180.89 91.5552 180.935C90.0509 180.98 88.5874 180.448 87.4637 179.449C86.3399 178.45 85.6408 177.059 85.5091 175.561C85.3774 174.062 85.8231 172.568 86.7551 171.385L87.2148 170.867L108.108 149.974ZM91.4154 141.639C92.5237 140.531 94.026 139.907 95.5918 139.906C97.1577 139.905 98.6589 140.525 99.7652 141.632C100.871 142.738 101.492 144.239 101.491 145.805C101.489 147.371 100.866 148.873 99.7578 149.981L87.2221 162.517C86.1139 163.625 84.6116 164.249 83.0457 164.25C81.4798 164.251 79.9786 163.631 78.8724 162.524C77.7661 161.418 77.1454 159.917 77.1468 158.351C77.1481 156.785 77.7715 155.283 78.8797 154.175L91.4154 141.639Z"/>'
+		$icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 250">'
+			. '<defs><linearGradient id="esx-menu-mark" x1="12%" y1="8%" x2="92%" y2="96%">'
+			. '<stop offset="0%" stop-color="#277AFF"/><stop offset="100%" stop-color="#2563EB"/>'
+			. '</linearGradient></defs>'
+			. '<path fill="url(#esx-menu-mark)" d="M129.067 53.9333C131.283 51.7168 134.288 50.4701 137.42 50.4673C140.551 50.4645 143.554 51.706 145.766 53.9185L195.821 103.973C198.033 106.186 199.275 109.188 199.272 112.32C199.269 115.451 198.022 118.456 195.806 120.673L128.949 187.53C126.732 189.746 123.728 190.993 120.596 190.996C117.464 190.998 114.462 189.757 112.249 187.544L108.078 183.373L116.435 175.016L120.606 179.187L187.464 112.33L143.345 68.2113L143.294 126.117C143.291 128.465 142.356 130.718 140.694 132.38C139.032 134.042 136.779 134.977 134.431 134.98L76.4501 135.031L78.8945 137.475L70.5373 145.832L62.1949 137.49C59.9824 135.277 58.7409 132.275 58.7437 129.143C58.7465 126.011 59.9932 123.007 62.2096 120.79L129.067 53.9333ZM108.108 149.974C109.174 148.91 110.605 148.293 112.11 148.248C113.614 148.204 115.077 148.735 116.201 149.734C117.325 150.733 118.024 152.124 118.156 153.623C118.287 155.122 117.842 156.615 116.91 157.798L116.45 158.316L95.5572 179.209C94.491 180.273 93.0595 180.89 91.5552 180.935C90.0509 180.98 88.5874 180.448 87.4637 179.449C86.3399 178.45 85.6408 177.059 85.5091 175.561C85.3774 174.062 85.8231 172.568 86.7551 171.385L87.2148 170.867L108.108 149.974ZM91.4154 141.639C92.5237 140.531 94.026 139.907 95.5918 139.906C97.1577 139.905 98.6589 140.525 99.7652 141.632C100.871 142.738 101.492 144.239 101.491 145.805C101.489 147.371 100.866 148.873 99.7578 149.981L87.2221 162.517C86.1139 163.625 84.6116 164.249 83.0457 164.25C81.4798 164.251 79.9786 163.631 78.8724 162.524C77.7661 161.418 77.1454 159.917 77.1468 158.351C77.1481 156.785 77.7715 155.283 78.8797 154.175L91.4154 141.639Z"/>'
 			. '</svg>';
 		$icon_data = 'data:image/svg+xml;base64,' . base64_encode( $icon_svg );
 
@@ -92,6 +89,8 @@ class EmailSendX_Admin {
 
 		$tabs    = self::get_tabs();
 		$current = self::get_current_tab();
+
+		self::evaluate_preconditions( $current );
 
 		$settings   = emailsendx_sync_get_settings();
 		$workspace  = '';
@@ -252,6 +251,89 @@ class EmailSendX_Admin {
 	}
 
 	/**
+	 * Run the page-render precondition checks and push/clear notices.
+	 * ShaonPro.
+	 *
+	 * @param string $current_tab The active tab slug.
+	 * @return void
+	 */
+	protected static function evaluate_preconditions( $current_tab ) {
+		if ( ! class_exists( 'EmailSendX_Notices' ) ) {
+			return;
+		}
+
+		$configured   = function_exists( 'emailsendx_sync_is_configured' ) && emailsendx_sync_is_configured();
+		$settings     = function_exists( 'emailsendx_sync_get_settings' ) ? emailsendx_sync_get_settings() : array();
+		$has_list     = ! empty( $settings['default_list_id'] );
+		$auto_sync    = ! empty( $settings['auto_sync'] );
+		$roles        = function_exists( 'emailsendx_sync_get_roles' ) ? emailsendx_sync_get_roles() : array();
+		$settings_url = self::get_admin_url( 'settings' );
+
+		// 1. Not connected.
+		if ( ! $configured && 'settings' !== $current_tab ) {
+			EmailSendX_Notices::add(
+				'not_connected',
+				'warning',
+				__( 'EmailSendX is not connected yet. Add your API key in Settings to start syncing.', 'emailsendx-sync' ),
+				array(
+					'ttl'         => 0,
+					'dismissible' => false,
+					'actions'     => array( array( 'label' => __( 'Go to Settings', 'emailsendx-sync' ), 'url' => $settings_url ) ),
+				)
+			);
+		} else {
+			EmailSendX_Notices::clear( 'not_connected' );
+		}
+
+		// 2. Missing default list when on sync/mapping.
+		if ( $configured && ! $has_list && in_array( $current_tab, array( 'sync', 'mapping' ), true ) ) {
+			EmailSendX_Notices::add(
+				'list_missing',
+				'warning',
+				__( 'No default EmailSendX list selected. Pick one in Settings before syncing.', 'emailsendx-sync' ),
+				array(
+					'ttl'     => 0,
+					'actions' => array( array( 'label' => __( 'Pick a list', 'emailsendx-sync' ), 'url' => $settings_url ) ),
+				)
+			);
+		} else {
+			EmailSendX_Notices::clear( 'list_missing' );
+		}
+
+		// 3. Auto-sync on but no roles selected → pushing everyone.
+		if ( $auto_sync && empty( $roles ) ) {
+			EmailSendX_Notices::add(
+				'no_roles_selected',
+				'info',
+				__( 'Auto-sync is pushing all user roles — pick specific roles in Settings if that is not what you want.', 'emailsendx-sync' ),
+				array(
+					'ttl'     => 86400,
+					'actions' => array( array( 'label' => __( 'Choose roles', 'emailsendx-sync' ), 'url' => $settings_url ) ),
+				)
+			);
+		} else {
+			EmailSendX_Notices::clear( 'no_roles_selected' );
+		}
+	}
+
+	/**
+	 * Sidebar menu styling on every `wp-admin` screen (small footprint).
+	 * ShaonPro.
+	 */
+	public function enqueue_menu_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		wp_enqueue_style(
+			'emailsendx-sync-admin-menu',
+			EMAILSENDX_SYNC_URL . 'assets/css/admin-menu.css',
+			array(),
+			EMAILSENDX_SYNC_VERSION
+		);
+	}
+
+	/**
 	 * Enqueue the plugin's CSS + JS — but only on its own admin page so
 	 * we don't pollute the global WP admin.
 	 *
@@ -288,13 +370,15 @@ class EmailSendX_Admin {
 				'tab'      => self::get_current_tab(),
 				'build'    => SHAONPRO_BUILD,
 				'i18n'     => array(
-					'syncing'        => __( 'Syncing…', 'emailsendx-sync' ),
-					'success'        => __( 'Sync complete.', 'emailsendx-sync' ),
-					'failed'         => __( 'Sync failed.', 'emailsendx-sync' ),
-					'confirmRun'     => __( 'Run a full sync now?', 'emailsendx-sync' ),
-					'batchProgress'  => __( 'Syncing batch %1$d of %2$d…', 'emailsendx-sync' ),
-					'contactsPushed' => __( '%d contacts pushed.', 'emailsendx-sync' ),
-					'networkError'   => __( 'Network error. Please retry.', 'emailsendx-sync' ),
+					'syncing'           => __( 'Syncing…', 'emailsendx-sync' ),
+					'success'           => __( 'Sync complete.', 'emailsendx-sync' ),
+					'failed'            => __( 'Sync failed.', 'emailsendx-sync' ),
+					'confirmRun'        => __( 'Run a full sync now?', 'emailsendx-sync' ),
+					'batchProgress'     => __( 'Syncing batch %1$d of %2$d…', 'emailsendx-sync' ),
+					'contactsPushed'    => __( '%d contacts pushed.', 'emailsendx-sync' ),
+					'networkError'      => __( 'Network error. Please retry.', 'emailsendx-sync' ),
+					'listPlaceholder'   => __( '— Select a list —', 'emailsendx-sync' ),
+					'listPickPlaceholder' => __( '— Pick a list —', 'emailsendx-sync' ),
 				),
 			)
 		);

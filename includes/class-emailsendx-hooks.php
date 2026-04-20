@@ -6,7 +6,7 @@
  *   • the daily WP-cron reconciliation
  *   • user-lifecycle hooks (register / profile_update / delete_user)
  *   • optional WooCommerce customer + order hooks
- *   • the three admin-AJAX endpoints the settings UI calls
+ *   • the admin-AJAX endpoints the settings / sync UI calls
  *
  * Every callback is guarded so a misconfigured install or a missing
  * dependency (no API key, no WC) is a silent no-op rather than a fatal.
@@ -53,6 +53,13 @@ class EmailSendX_Hooks {
 		add_action( 'wp_ajax_emailsendx_run_sync',        array( __CLASS__, 'ajax_run_sync' ) );
 		add_action( 'wp_ajax_emailsendx_sync_status',     array( __CLASS__, 'ajax_sync_status' ) );
 		add_action( 'wp_ajax_emailsendx_test_connection', array( __CLASS__, 'ajax_test_connection' ) );
+		add_action( 'wp_ajax_emailsendx_get_lists', array( __CLASS__, 'ajax_get_lists' ) );
+
+		// Async worker endpoint (no nonce — uses one-shot token from job
+		// transient; nopriv alias is intentional so the spawned request
+		// lands even if cookies drop). ShaonPro.
+		add_action( 'wp_ajax_emailsendx_run_sync_worker',        array( __CLASS__, 'ajax_run_sync_worker' ) );
+		add_action( 'wp_ajax_nopriv_emailsendx_run_sync_worker', array( __CLASS__, 'ajax_run_sync_worker' ) );
 	}
 
 	/* ─── User lifecycle ───────────────────────────────────────────── */
@@ -136,6 +143,9 @@ class EmailSendX_Hooks {
 		if ( ! self::auto_sync_ready() ) {
 			return;
 		}
+		if ( ! self::user_passes_role_filter( (int) $customer_id ) ) {
+			return;
+		}
 		self::push_single_user( (int) $customer_id );
 	}
 
@@ -160,7 +170,7 @@ class EmailSendX_Hooks {
 		}
 
 		$user_id = (int) $order->get_user_id();
-		if ( $user_id > 0 ) {
+		if ( $user_id > 0 && self::user_passes_role_filter( $user_id ) ) {
 			self::push_single_user( $user_id );
 		}
 	}
@@ -168,10 +178,16 @@ class EmailSendX_Hooks {
 	/* ─── AJAX ─────────────────────────────────────────────────────── */
 
 	/**
-	 * AJAX: run a sync now.
+	 * AJAX: kick off a sync asynchronously.
 	 *
-	 * Expected POST: nonce, source, list_id?, list_name?, limit?
-	 * Response: { success: bool, data: <run-envelope or {message}> }
+	 * Validates nonce + caps, generates a run_id + one-shot worker token,
+	 * stashes the run args in a 5-minute transient, seeds the status
+	 * transient with phase='queued', then spawns a non-blocking
+	 * self-request to the worker endpoint. Returns immediately so the
+	 * admin UI can start polling the status transient. ShaonPro.
+	 *
+	 * Expected POST: nonce, source, list_id?, list_name?, limit?, roles[]?
+	 * Response: { success: true, data: { ok: true, run_id } }
 	 *
 	 * @return void
 	 */
@@ -179,7 +195,7 @@ class EmailSendX_Hooks {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'emailsendx-sync' ) ), 403 );
 		}
-		check_ajax_referer( 'emailsendx_sync_ajax', 'nonce' );
+		check_ajax_referer( 'emailsendx_sync_ajax' );
 
 		try {
 			$source    = isset( $_POST['source'] )    ? sanitize_key( wp_unslash( $_POST['source'] ) )    : 'users';
@@ -187,27 +203,157 @@ class EmailSendX_Hooks {
 			$list_name = isset( $_POST['list_name'] ) ? sanitize_text_field( wp_unslash( $_POST['list_name'] ) ) : '';
 			$limit     = isset( $_POST['limit'] )     ? max( 0, (int) $_POST['limit'] ) : 0;
 
+			// roles[] for the users source — sanitize_key each, drop empties, cap at 20.
+			$roles = array();
+			if ( isset( $_POST['roles'] ) && is_array( $_POST['roles'] ) ) {
+				foreach ( wp_unslash( $_POST['roles'] ) as $raw ) {
+					$slug = sanitize_key( (string) $raw );
+					if ( '' !== $slug && ! in_array( $slug, $roles, true ) ) {
+						$roles[] = $slug;
+					}
+					if ( count( $roles ) >= 20 ) {
+						break;
+					}
+				}
+			}
+
+			$source_args = array();
+			if ( 'users' === $source && ! empty( $roles ) ) {
+				$source_args['roles'] = $roles;
+			}
+
 			$args = array(
-				'source'    => $source,
-				'trigger'   => 'manual',
-				'list_id'   => $list_id !== '' ? $list_id : null,
-				'list_name' => $list_name !== '' ? $list_name : null,
+				'source'      => $source,
+				'trigger'     => 'manual',
+				'list_id'     => $list_id !== '' ? $list_id : null,
+				'list_name'   => $list_name !== '' ? $list_name : null,
+				'source_args' => $source_args,
 			);
 			if ( $limit > 0 ) {
 				$args['limit'] = $limit;
 			}
 
-			$result = EmailSendX_Sync::run( $args );
+			$run_id = function_exists( 'wp_generate_uuid4' ) ? wp_generate_uuid4() : uniqid( 'esx_', true );
+			$token  = wp_generate_password( 48, false, false );
 
-			if ( ! empty( $result['ok'] ) ) {
-				wp_send_json_success( $result );
-			} else {
-				// Still return the envelope so the UI can render partial totals.
-				wp_send_json_error( $result );
-			}
+			// Stash the job payload; worker consumes single-use.
+			set_transient(
+				'emailsendx_sync_job_' . $run_id,
+				array(
+					'args'       => $args,
+					'token'      => $token,
+					'created_at' => time(),
+				),
+				5 * MINUTE_IN_SECONDS
+			);
+
+			// Seed the status transient with phase=queued so the poller
+			// shows progress immediately.
+			$source_label = EmailSendX_Sync::resolve_source_label( $source );
+			set_transient(
+				EMAILSENDX_SYNC_STATUS_TRANS,
+				array(
+					'phase'         => 'queued',
+					'phase_label'   => __( 'Queued', 'emailsendx-sync' ),
+					'source'        => $source,
+					'source_label'  => $source_label,
+					'list_id'       => $list_id !== '' ? $list_id : null,
+					'batches_done'  => 0,
+					'batches_total' => 0,
+					'totals'        => array( 'created' => 0, 'updated' => 0, 'failed' => 0, 'skipped' => 0 ),
+					'started_at'    => time(),
+					'updated_at'    => time(),
+					'percent'       => 5,
+					'run_id'        => $run_id,
+				),
+				5 * MINUTE_IN_SECONDS
+			);
+
+			// Fire-and-forget worker request. Non-blocking.
+			wp_remote_post(
+				admin_url( 'admin-ajax.php' ),
+				array(
+					'timeout'   => 0.1,
+					'blocking'  => false,
+					'cookies'   => isset( $_COOKIE ) && is_array( $_COOKIE ) ? wp_unslash( $_COOKIE ) : array(),
+					'sslverify' => apply_filters( 'https_local_ssl_verify', false ),
+					'body'      => array(
+						'action' => 'emailsendx_run_sync_worker',
+						'run_id' => $run_id,
+						'token'  => $token,
+					),
+				)
+			);
+
+			wp_send_json_success(
+				array(
+					'ok'     => true,
+					'run_id' => $run_id,
+				)
+			);
 		} catch ( Exception $e ) {
 			wp_send_json_error( array( 'message' => $e->getMessage() ) );
 		}
+	}
+
+	/**
+	 * AJAX: the actual sync worker. Fired by the non-blocking self-request
+	 * spawned from ajax_run_sync(). Not nonce-gated; validates a one-shot
+	 * token from the job transient instead. ShaonPro.
+	 *
+	 * @return void
+	 */
+	public static function ajax_run_sync_worker() {
+		// Make the worker resilient to client disconnects + long runs.
+		if ( function_exists( 'ignore_user_abort' ) ) {
+			ignore_user_abort( true );
+		}
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		@set_time_limit( 0 );
+		// phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		@ini_set( 'memory_limit', '256M' );
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$run_id = isset( $_POST['run_id'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['run_id'] ) ) : '';
+		$token  = isset( $_POST['token'] )  ? sanitize_text_field( wp_unslash( (string) $_POST['token'] ) )  : '';
+		// phpcs:enable
+
+		if ( '' === $run_id || '' === $token ) {
+			wp_die( '', '', array( 'response' => 200 ) );
+		}
+
+		$job_key = 'emailsendx_sync_job_' . $run_id;
+		$job     = get_transient( $job_key );
+
+		if ( ! is_array( $job ) || empty( $job['token'] ) ) {
+			wp_die( '', '', array( 'response' => 200 ) );
+		}
+
+		// Single-use: delete on consume regardless of outcome.
+		delete_transient( $job_key );
+
+		$expected = (string) $job['token'];
+		if ( ! hash_equals( $expected, $token ) ) {
+			wp_die( '', '', array( 'response' => 200 ) );
+		}
+
+		$args = isset( $job['args'] ) && is_array( $job['args'] ) ? $job['args'] : array();
+		$args['run_id'] = $run_id;
+
+		try {
+			EmailSendX_Sync::run( $args );
+		} catch ( Exception $e ) {
+			if ( class_exists( 'EmailSendX_Log' ) && method_exists( 'EmailSendX_Log', 'record_error' ) ) {
+				EmailSendX_Log::record_error(
+					array(
+						'source'  => 'hooks.worker',
+						'message' => $e->getMessage(),
+					)
+				);
+			}
+		}
+
+		wp_die( '', '', array( 'response' => 200 ) );
 	}
 
 	/**
@@ -221,10 +367,23 @@ class EmailSendX_Hooks {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'emailsendx-sync' ) ), 403 );
 		}
-		check_ajax_referer( 'emailsendx_sync_ajax', 'nonce' );
+		check_ajax_referer( 'emailsendx_sync_ajax' );
 
 		try {
 			$status = EmailSendX_Sync::get_status();
+
+			// If the caller told us which run they're watching, echo it back.
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			$posted_run_id = isset( $_POST['run_id'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['run_id'] ) ) : '';
+			if ( '' !== $posted_run_id ) {
+				if ( ! is_array( $status ) ) {
+					$status = array();
+				}
+				if ( empty( $status['run_id'] ) ) {
+					$status['run_id'] = $posted_run_id;
+				}
+			}
+
 			wp_send_json_success( $status );
 		} catch ( Exception $e ) {
 			wp_send_json_error( array( 'message' => $e->getMessage() ) );
@@ -242,7 +401,7 @@ class EmailSendX_Hooks {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'emailsendx-sync' ) ), 403 );
 		}
-		check_ajax_referer( 'emailsendx_sync_ajax', 'nonce' );
+		check_ajax_referer( 'emailsendx_sync_ajax' );
 
 		try {
 			if ( ! class_exists( 'EmailSendX_API' ) ) {
@@ -264,6 +423,47 @@ class EmailSendX_Hooks {
 		} catch ( Exception $e ) {
 			wp_send_json_error( array( 'message' => $e->getMessage() ) );
 		}
+	}
+
+	/**
+	 * Return normalised lists for repainting `<select>`s when server-side
+	 * parsing missed the API envelope. ShaonPro.
+	 *
+	 * @return void
+	 */
+	public static function ajax_get_lists() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'emailsendx-sync' ) ), 403 );
+		}
+		check_ajax_referer( 'emailsendx_sync_ajax' );
+
+		if ( ! function_exists( 'emailsendx_sync_is_configured' ) || ! emailsendx_sync_is_configured() ) {
+			wp_send_json_success( array( 'lists' => array() ) );
+			return;
+		}
+		if ( ! class_exists( 'EmailSendX_API' ) || ! method_exists( 'EmailSendX_API', 'instance' ) ) {
+			wp_send_json_error( array( 'message' => __( 'API client not available.', 'emailsendx-sync' ) ) );
+			return;
+		}
+		if ( method_exists( 'EmailSendX_API', 'reset_instance' ) ) {
+			EmailSendX_API::reset_instance();
+		}
+		if ( ! function_exists( 'emailsendx_sync_fetch_all_lists' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Lists helper not loaded.', 'emailsendx-sync' ) ) );
+			return;
+		}
+
+		$fetch = emailsendx_sync_fetch_all_lists( EmailSendX_API::instance() );
+		if ( isset( $fetch['error'] ) && $fetch['error'] instanceof WP_Error ) {
+			wp_send_json_error( array( 'message' => $fetch['error']->get_error_message() ) );
+			return;
+		}
+
+		wp_send_json_success(
+			array(
+				'lists' => isset( $fetch['lists'] ) && is_array( $fetch['lists'] ) ? $fetch['lists'] : array(),
+			)
+		);
 	}
 
 	/* ─── Helpers ──────────────────────────────────────────────────── */
@@ -365,15 +565,18 @@ class EmailSendX_Hooks {
 	}
 
 	/**
-	 * If a `sync_role` is configured, only push users with that role.
+	 * If sync_roles is configured, only push users whose roles intersect
+	 * with the allow-list. Empty allow-list = pass. ShaonPro.
 	 *
 	 * @param int $user_id WP user id.
 	 * @return bool
 	 */
 	protected static function user_passes_role_filter( $user_id ) {
-		$s    = emailsendx_sync_get_settings();
-		$role = isset( $s['sync_role'] ) ? (string) $s['sync_role'] : '';
-		if ( '' === $role ) {
+		$allow = function_exists( 'emailsendx_sync_get_roles' )
+			? emailsendx_sync_get_roles()
+			: array();
+
+		if ( empty( $allow ) ) {
 			return true;
 		}
 
@@ -381,6 +584,8 @@ class EmailSendX_Hooks {
 		if ( ! $user || empty( $user->roles ) ) {
 			return false;
 		}
-		return in_array( $role, (array) $user->roles, true );
+
+		$have = array_map( 'strval', (array) $user->roles );
+		return count( array_intersect( $allow, $have ) ) > 0;
 	}
 }
