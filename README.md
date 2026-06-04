@@ -23,6 +23,11 @@
 
 It works the same for content sites, membership sites, and WooCommerce stores. WooCommerce is auto-detected — no extra add-on, no extra setup.
 
+<p align="center">
+  <img src=".github/screenshots/sync.png" alt="EmailSendX for WordPress — the Sync tab" width="860"><br>
+  <em>Pick a source and list, filter by role, and push thousands of contacts in one click.</em>
+</p>
+
 ## Features
 
 - **Set it and forget it** — enable auto-sync once; new users and customers sync on signup and profile update.
@@ -33,6 +38,23 @@ It works the same for content sites, membership sites, and WooCommerce stores. W
 - **Sync history** — per-batch breakdown of created / updated / skipped / failed, with the API's error messages inline.
 - **Per-role and per-list filtering** — sync only the roles you choose, into the list you choose.
 - **Auto-updates built in** — see [Updates](#updates) below.
+
+## Screenshots
+
+<p align="center">
+  <img src=".github/screenshots/connect.png" alt="One-click connect to EmailSendX" width="780"><br>
+  <em>One-click connect — approve a scoped API key, nothing to copy-paste.</em>
+</p>
+
+<p align="center">
+  <img src=".github/screenshots/mapping.png" alt="Field mapping for WordPress and WooCommerce" width="860"><br>
+  <em>Map WordPress &amp; WooCommerce fields to EmailSendX, with a merge-tag cheat sheet.</em>
+</p>
+
+<p align="center">
+  <img src=".github/screenshots/settings.png" alt="Settings and sync behavior" width="860"><br>
+  <em>Connect, choose a default list, and tune auto-sync + role filters.</em>
+</p>
 
 ## Install
 
