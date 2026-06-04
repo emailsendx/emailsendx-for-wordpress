@@ -1,4 +1,4 @@
-/* EmailSendX Sync admin JS · ShaonPro · v1.0.0 */
+/* EmailSendX Sync admin JS · ShaonPro */
 ( function () {
 	'use strict';
 
