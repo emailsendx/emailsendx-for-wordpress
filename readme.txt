@@ -68,7 +68,7 @@ Open **EmailSendX → Settings** and pick a role from the **Sync role** dropdown
 
 = What happens when a user is deleted in WordPress? =
 
-By default the plugin does **not** delete contacts in EmailSendX — you may still want to email them. If you want deletion to propagate, enable the "Mirror deletions" option on the Settings tab.
+By default the plugin does **not** delete or unsubscribe contacts in EmailSendX when a WordPress user is deleted — you may still want to email them, so deletion is intentionally not mirrored. To stop emailing someone, unsubscribe or suppress them inside EmailSendX.
 
 = Can I create EmailSendX custom fields without leaving WordPress? =
 

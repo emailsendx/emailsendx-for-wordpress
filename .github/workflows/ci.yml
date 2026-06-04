@@ -1,0 +1,37 @@
+name: CI
+
+# Fast feedback on every push / PR to main: lint all PHP and prove the
+# plugin still builds into a clean installable zip. No release is cut here.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    name: Lint & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 7.4 (plugin minimum)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
+      - name: Lint plugin PHP (syntax check every file)
+        run: |
+          find . -name '*.php' -not -path './vendor/*' -not -path './tools/*' -print0 \
+            | xargs -0 -n1 -P4 php -l
+
+      - name: Build installable zip
+        run: bash tools/build.sh
+
+      - name: Upload built zip as a CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emailsendx-sync-zip
+          path: tools/dist/emailsendx-sync.zip
+          if-no-files-found: error

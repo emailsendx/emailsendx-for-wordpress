@@ -1,0 +1,53 @@
+name: Release
+
+# Cut a release by pushing a version tag, e.g.:
+#   git tag v1.2.2 && git push origin v1.2.2
+# This lints, verifies the tag matches the plugin version, builds the
+# installable zip, and publishes it as a GitHub Release asset named
+# emailsendx-sync.zip — which is exactly what the in-plugin updater and
+# the always-latest download URL resolve to.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # required to create the release + upload the asset
+
+jobs:
+  release:
+    name: Build & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 7.4 (plugin minimum)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
+      - name: Lint plugin PHP (syntax check every file)
+        run: |
+          find . -name '*.php' -not -path './vendor/*' -not -path './tools/*' -print0 \
+            | xargs -0 -n1 -P4 php -l
+
+      - name: Verify the tag matches the plugin version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(grep -E '^[[:space:]]*\*[[:space:]]*Version:' emailsendx-sync.php | grep -oE '[0-9]+(\.[0-9]+){1,}' | head -1)"
+          echo "tag=v$TAG  plugin header=$VER"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::Tag v$TAG does not match plugin Version $VER — bump the header, EMAILSENDX_SYNC_VERSION, and readme Stable tag, then retag."
+            exit 1
+          fi
+
+      - name: Build installable zip
+        run: bash tools/build.sh   # also enforces header == constant == readme Stable tag
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tools/dist/emailsendx-sync.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true

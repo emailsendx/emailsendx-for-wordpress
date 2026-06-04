@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Build output — the install zip lives in GitHub Releases, never in source
+/tools/dist/
+/tools/.build/
+*.zip

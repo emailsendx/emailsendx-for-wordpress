@@ -1,2 +1,11 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep `git archive` / GitHub "Download ZIP" of source lean — these dev-only
+# paths never belong in a distributed build. (The real install zip is built
+# by tools/build.sh and attached to GitHub Releases.)
+/.gitattributes export-ignore
+/.gitignore     export-ignore
+/.github/       export-ignore
+/tools/         export-ignore
+/README.md      export-ignore

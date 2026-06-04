@@ -94,6 +94,37 @@ spl_autoload_register( function ( $class_name ) {
 	}
 } );
 
+/* ─── Auto-updates via GitHub Releases ─────────────────────────────── */
+
+/**
+ * Wire WordPress's native update system to this plugin's GitHub Releases,
+ * so "Update available" notices and one-click / background updates behave
+ * exactly like a .org-hosted plugin — without being listed on .org.
+ *
+ * The release asset built by tools/build.sh (emailsendx-sync.zip) is what
+ * gets installed, so upgrades land in the correct emailsendx-sync/ folder.
+ * Public repo → no token needed. The bundled Plugin Update Checker library
+ * (YahnisElsts, MIT) lives under vendor/plugin-update-checker. ShaonPro.
+ */
+if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+	$emailsendx_sync_puc = EMAILSENDX_SYNC_PATH . 'vendor/plugin-update-checker/plugin-update-checker.php';
+
+	if ( is_readable( $emailsendx_sync_puc ) ) {
+		require_once $emailsendx_sync_puc;
+
+		$emailsendx_sync_updates = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+			'https://github.com/emailsendx/emailsendx-for-wordpress/',
+			EMAILSENDX_SYNC_FILE,
+			'emailsendx-sync'
+		);
+
+		// Install the release ASSET (emailsendx-sync.zip), not GitHub's
+		// auto-generated source zipball — the asset carries the correct
+		// top-level emailsendx-sync/ folder and omits dev files.
+		$emailsendx_sync_updates->getVcsApi()->enableReleaseAssets( '/emailsendx-sync\.zip$/' );
+	}
+}
+
 /* ─── Activation / deactivation ────────────────────────────────────── */
 
 register_activation_hook( __FILE__, array( 'EmailSendX_Activator', 'activate' ) );
