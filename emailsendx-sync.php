@@ -3,7 +3,7 @@
  * Plugin Name:       EmailSendX for WordPress
  * Plugin URI:        https://emailsendx.com/
  * Description:       Sync your WordPress users and WooCommerce customers to EmailSendX contact lists. Manual + automatic sync, custom field mapping, sync history.
- * Version:           1.2.1
+ * Version:           1.2.2
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            EmailSendX
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /* ─── Plugin constants ─────────────────────────────────────────────── */
 
-define( 'EMAILSENDX_SYNC_VERSION',  '1.2.1' );
+define( 'EMAILSENDX_SYNC_VERSION',  '1.2.2' );
 define( 'EMAILSENDX_SYNC_FILE',     __FILE__ );
 define( 'EMAILSENDX_SYNC_PATH',     plugin_dir_path( __FILE__ ) );
 define( 'EMAILSENDX_SYNC_URL',      plugin_dir_url( __FILE__ ) );

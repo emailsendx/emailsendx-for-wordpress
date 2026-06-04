@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, woocommerce, sync, contacts, customers, crm
 Requires at least: 6.0
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.2.1
+Stable tag: 1.2.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -86,6 +86,9 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.2.2 =
+* Add UI screenshots to the README
+
 = 1.2.1 =
 * Maintenance release; plugin header and readme stable tag aligned on version 1.2.1.
 
@@ -106,6 +109,9 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.2.2 =
+Add UI screenshots to the README
 
 = 1.2.1 =
 Recommended update; version metadata and release notes refreshed.
