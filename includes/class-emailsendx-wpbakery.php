@@ -47,13 +47,6 @@ class EmailSendX_WPBakery {
 	const CATEGORY = 'EmailSendX';
 
 	/**
-	 * Transient keys + TTL for the cached picker data.
-	 */
-	const FORMS_TRANSIENT = 'emailsendx_vc_forms';
-	const LISTS_TRANSIENT = 'emailsendx_vc_lists';
-	const PICKER_TTL       = 120;
-
-	/**
 	 * Wire the adapter — but only when WPBakery is present. ShaonPro.
 	 */
 	public function __construct() {
@@ -129,16 +122,17 @@ class EmailSendX_WPBakery {
 		// Build the picker <select> option maps + their contextual help.
 		// The API is only queried in an editor context (see get_*_cached),
 		// so a normal front-end page load never triggers a remote call.
-		$forms_options = self::dropdown_options( 'forms' );
-		$lists_options = self::dropdown_options( 'lists' );
-		$forms_help    = self::picker_description( 'forms' );
-		$lists_help    = self::picker_description( 'lists' );
+		$forms_options = EmailSendX_Builder_Data::dropdown_options( 'forms' );
+		$lists_options = EmailSendX_Builder_Data::dropdown_options( 'lists' );
+		$forms_help    = EmailSendX_Builder_Data::picker_description( 'forms' );
+		$lists_help    = EmailSendX_Builder_Data::picker_description( 'lists' );
 
 		// Shared "Style" tab — identical controls on both elements. Each
 		// maps to a CSS variable or modifier class on the shortcode wrapper
 		// ({@see EmailSendX_Forms::inline_style()} / wrap_classes()).
 		$style_group  = esc_html__( 'Style', 'emailsendx-sync' );
 		$style_params = array(
+			/* ── Layout ─────────────────────────────────────────────── */
 			array(
 				'type'       => 'dropdown',
 				'heading'    => esc_html__( 'Alignment', 'emailsendx-sync' ),
@@ -146,6 +140,20 @@ class EmailSendX_WPBakery {
 				'value'      => $align_values,
 				'std'        => '',
 				'group'      => $style_group,
+			),
+			array(
+				'type'        => 'dropdown',
+				'heading'     => esc_html__( 'Width', 'emailsendx-sync' ),
+				'param_name'  => 'width',
+				'value'       => array(
+					esc_html__( 'Default (480px)', 'emailsendx-sync' ) => '',
+					esc_html__( 'Narrow (360px)', 'emailsendx-sync' )  => 'narrow',
+					esc_html__( 'Wide (640px)', 'emailsendx-sync' )    => 'wide',
+					esc_html__( 'Full width', 'emailsendx-sync' )      => 'full',
+				),
+				'std'         => '',
+				'description' => esc_html__( 'Use Full width to fill the column it sits in.', 'emailsendx-sync' ),
+				'group'       => $style_group,
 			),
 			array(
 				'type'       => 'dropdown',
@@ -161,6 +169,33 @@ class EmailSendX_WPBakery {
 			),
 			array(
 				'type'       => 'dropdown',
+				'heading'    => esc_html__( 'Field spacing', 'emailsendx-sync' ),
+				'param_name' => 'spacing',
+				'value'      => array(
+					esc_html__( 'Default', 'emailsendx-sync' ) => '',
+					esc_html__( 'Compact', 'emailsendx-sync' ) => 'compact',
+					esc_html__( 'Relaxed', 'emailsendx-sync' ) => 'relaxed',
+				),
+				'std'        => '',
+				'group'      => $style_group,
+			),
+
+			/* ── Fields ─────────────────────────────────────────────── */
+			array(
+				'type'        => 'dropdown',
+				'heading'     => esc_html__( 'Field style', 'emailsendx-sync' ),
+				'param_name'  => 'field_style',
+				'value'       => array(
+					esc_html__( 'Outlined', 'emailsendx-sync' )  => '',
+					esc_html__( 'Filled', 'emailsendx-sync' )    => 'filled',
+					esc_html__( 'Underline', 'emailsendx-sync' ) => 'underline',
+				),
+				'std'         => '',
+				'description' => esc_html__( 'Outlined = bordered box. Filled = tinted, borderless. Underline = minimal bottom rule.', 'emailsendx-sync' ),
+				'group'       => $style_group,
+			),
+			array(
+				'type'       => 'dropdown',
 				'heading'    => esc_html__( 'Corner radius', 'emailsendx-sync' ),
 				'param_name' => 'radius',
 				'value'      => array(
@@ -172,6 +207,39 @@ class EmailSendX_WPBakery {
 				'std'        => '',
 				'group'      => $style_group,
 			),
+			array(
+				'type'        => 'dropdown',
+				'heading'     => esc_html__( 'Labels', 'emailsendx-sync' ),
+				'param_name'  => 'labels',
+				'value'       => array(
+					esc_html__( 'Show', 'emailsendx-sync' )              => '',
+					esc_html__( 'Hidden (placeholder only)', 'emailsendx-sync' ) => 'hidden',
+				),
+				'std'         => '',
+				'description' => esc_html__( 'Hidden keeps labels for screen readers.', 'emailsendx-sync' ),
+				'group'       => $style_group,
+			),
+			array(
+				'type'        => 'colorpicker',
+				'heading'     => esc_html__( 'Field background', 'emailsendx-sync' ),
+				'param_name'  => 'field_bg',
+				'description' => esc_html__( 'Set this for forms on a dark or tinted section.', 'emailsendx-sync' ),
+				'group'       => $style_group,
+			),
+			array(
+				'type'       => 'colorpicker',
+				'heading'    => esc_html__( 'Field text colour', 'emailsendx-sync' ),
+				'param_name' => 'field_color',
+				'group'      => $style_group,
+			),
+			array(
+				'type'       => 'colorpicker',
+				'heading'    => esc_html__( 'Field border colour', 'emailsendx-sync' ),
+				'param_name' => 'border_color',
+				'group'      => $style_group,
+			),
+
+			/* ── Button ─────────────────────────────────────────────── */
 			array(
 				'type'        => 'colorpicker',
 				'heading'     => esc_html__( 'Accent colour', 'emailsendx-sync' ),
@@ -192,6 +260,19 @@ class EmailSendX_WPBakery {
 				'value'      => array(
 					esc_html__( 'Solid', 'emailsendx-sync' )   => '',
 					esc_html__( 'Outline', 'emailsendx-sync' ) => 'outline',
+				),
+				'std'        => '',
+				'group'      => $style_group,
+			),
+			array(
+				'type'       => 'dropdown',
+				'heading'    => esc_html__( 'Button alignment', 'emailsendx-sync' ),
+				'param_name' => 'button_align',
+				'value'      => array(
+					esc_html__( 'Default', 'emailsendx-sync' ) => '',
+					esc_html__( 'Left', 'emailsendx-sync' )    => 'left',
+					esc_html__( 'Center', 'emailsendx-sync' )  => 'center',
+					esc_html__( 'Right', 'emailsendx-sync' )   => 'right',
 				),
 				'std'        => '',
 				'group'      => $style_group,
@@ -315,203 +396,6 @@ class EmailSendX_WPBakery {
 				),
 			)
 		);
-	}
-
-	/* ─── Picker options + empty-state help ────────────────────────── */
-
-	/**
-	 * Build a WPBakery dropdown `value` map ( 'Label' => stored_value ) for
-	 * a picker. A leading placeholder maps to '' so "nothing chosen" is the
-	 * default; when the workspace has none of the requested item, a single
-	 * explanatory row shows — the actionable link lives in the param
-	 * description ({@see picker_description()}).
-	 *
-	 * @param string $kind 'forms' | 'lists'.
-	 * @return array<string, string>
-	 */
-	protected static function dropdown_options( $kind ) {
-		$items = ( 'lists' === $kind ) ? self::get_lists_cached() : self::get_forms_cached();
-
-		if ( empty( $items ) ) {
-			$label = ( 'lists' === $kind )
-				? esc_html__( '— No lists found —', 'emailsendx-sync' )
-				: esc_html__( '— No forms found —', 'emailsendx-sync' );
-			return array( $label => '' );
-		}
-
-		$placeholder = ( 'lists' === $kind )
-			? esc_html__( '— Select a list —', 'emailsendx-sync' )
-			: esc_html__( '— Select a form —', 'emailsendx-sync' );
-
-		$options = array( $placeholder => '' );
-		foreach ( $items as $item ) {
-			$id = isset( $item['id'] ) ? (string) $item['id'] : '';
-			if ( '' === $id ) {
-				continue;
-			}
-			$name  = isset( $item['name'] ) && '' !== $item['name'] ? (string) $item['name'] : $id;
-			$label = $name;
-			// Dropdown keys must be unique — disambiguate same-named rows.
-			if ( isset( $options[ $label ] ) ) {
-				$label = $name . ' (' . substr( $id, -6 ) . ')';
-			}
-			$options[ $label ] = $id;
-		}
-		return $options;
-	}
-
-	/**
-	 * Contextual help shown under a picker. Adapts to the connection state
-	 * so an empty dropdown always tells the user what to fix and links
-	 * straight to where to fix it.
-	 *
-	 * @param string $kind 'forms' | 'lists'.
-	 * @return string HTML.
-	 */
-	protected static function picker_description( $kind ) {
-		$settings_url = ( class_exists( 'EmailSendX_Admin' ) && method_exists( 'EmailSendX_Admin', 'get_admin_url' ) )
-			? EmailSendX_Admin::get_admin_url( 'settings' )
-			: admin_url( 'admin.php?page=emailsendx-sync' );
-
-		// 1. Not connected → send them to the plugin's Settings page.
-		if ( ! self::api_ready() ) {
-			return sprintf(
-				/* translators: %s: linked "EmailSendX settings page" text. */
-				esc_html__( 'Not connected yet. Add your API key on the %s, then reopen this element.', 'emailsendx-sync' ),
-				'<a href="' . esc_url( $settings_url ) . '">' . esc_html__( 'EmailSendX settings page', 'emailsendx-sync' ) . '</a>'
-			);
-		}
-
-		$dashboard = self::dashboard_url();
-		$items     = ( 'lists' === $kind ) ? self::get_lists_cached() : self::get_forms_cached();
-
-		// 2. Connected but nothing to pick → link to where it's created.
-		if ( empty( $items ) ) {
-			$link = '<a href="' . esc_url( $dashboard ) . '" target="_blank" rel="noopener">'
-				. esc_html__( 'EmailSendX dashboard', 'emailsendx-sync' ) . '</a>';
-			if ( 'lists' === $kind ) {
-				return sprintf(
-					/* translators: %s: linked "EmailSendX dashboard" text. */
-					esc_html__( 'No contact lists found in your workspace. Create one in your %s, then reopen this element.', 'emailsendx-sync' ),
-					$link
-				);
-			}
-			return sprintf(
-				/* translators: %s: linked "EmailSendX dashboard" text. */
-				esc_html__( 'No forms found in your workspace. Build one in your %s, then reopen this element.', 'emailsendx-sync' ),
-				$link
-			);
-		}
-
-		// 3. Normal state — a plain hint.
-		if ( 'lists' === $kind ) {
-			return esc_html__( 'Subscribers are added to this list (single opt-in). For confirmed / double opt-in, use the EmailSendX Form element instead.', 'emailsendx-sync' );
-		}
-		return esc_html__( 'Fields, double opt-in and spam protection come from the form itself — manage them in your EmailSendX dashboard under Forms.', 'emailsendx-sync' );
-	}
-
-	/**
-	 * The EmailSendX dashboard base URL (the configured API base).
-	 *
-	 * @return string
-	 */
-	protected static function dashboard_url() {
-		$settings = function_exists( 'emailsendx_sync_get_settings' ) ? emailsendx_sync_get_settings() : array();
-		$base     = isset( $settings['api_base'] ) ? rtrim( (string) $settings['api_base'], '/' ) : '';
-		if ( '' === $base ) {
-			$base = defined( 'EMAILSENDX_SYNC_DEFAULT_API_BASE' ) ? EMAILSENDX_SYNC_DEFAULT_API_BASE : 'https://emailsendx.com';
-		}
-		if ( ! preg_match( '#^https?://#i', $base ) ) {
-			$base = 'https://' . $base;
-		}
-		return $base;
-	}
-
-	/* ─── Cached remote data ───────────────────────────────────────── */
-
-	/**
-	 * Fetch (and cache) the workspace's forms as [ ['id'=>,'name'=>], .. ].
-	 *
-	 * @return array<int, array{id:string, name:string}>
-	 */
-	protected static function get_forms_cached() {
-		$cached = get_transient( self::FORMS_TRANSIENT );
-		if ( is_array( $cached ) ) {
-			return $cached;
-		}
-
-		// Only query the API from an editor / admin-ajax context; a front-
-		// end page view never renders these labels, so skip the call.
-		if ( ! is_admin() || ! self::api_ready() ) {
-			return array();
-		}
-
-		$res = EmailSendX_API::instance()->get_forms( 1, 100 );
-		if ( is_wp_error( $res ) || ! is_array( $res ) ) {
-			return array(); // Transient failure — don't cache; let it retry.
-		}
-
-		$out  = array();
-		$rows = isset( $res['data'] ) && is_array( $res['data'] ) ? $res['data'] : array();
-		foreach ( $rows as $r ) {
-			if ( is_array( $r ) && ! empty( $r['id'] ) ) {
-				$out[] = array(
-					'id'   => (string) $r['id'],
-					'name' => isset( $r['name'] ) && '' !== $r['name'] ? (string) $r['name'] : (string) $r['id'],
-				);
-			}
-		}
-
-		set_transient( self::FORMS_TRANSIENT, $out, self::PICKER_TTL );
-		return $out;
-	}
-
-	/**
-	 * Fetch (and cache) the workspace's contact lists.
-	 *
-	 * @return array<int, array{id:string, name:string}>
-	 */
-	protected static function get_lists_cached() {
-		$cached = get_transient( self::LISTS_TRANSIENT );
-		if ( is_array( $cached ) ) {
-			return $cached;
-		}
-
-		if ( ! is_admin() || ! self::api_ready() || ! function_exists( 'emailsendx_sync_fetch_all_lists' ) ) {
-			return array();
-		}
-
-		$fetch = emailsendx_sync_fetch_all_lists( EmailSendX_API::instance() );
-		if ( isset( $fetch['error'] ) && $fetch['error'] instanceof WP_Error ) {
-			return array(); // Transient failure — don't cache; let it retry.
-		}
-
-		$out = array();
-		if ( isset( $fetch['lists'] ) && is_array( $fetch['lists'] ) ) {
-			foreach ( $fetch['lists'] as $l ) {
-				if ( is_array( $l ) && ! empty( $l['id'] ) ) {
-					$out[] = array(
-						'id'   => (string) $l['id'],
-						'name' => isset( $l['name'] ) && '' !== $l['name'] ? (string) $l['name'] : (string) $l['id'],
-					);
-				}
-			}
-		}
-
-		set_transient( self::LISTS_TRANSIENT, $out, self::PICKER_TTL );
-		return $out;
-	}
-
-	/**
-	 * Whether the API client is configured and available.
-	 *
-	 * @return bool
-	 */
-	protected static function api_ready() {
-		return function_exists( 'emailsendx_sync_is_configured' )
-			&& emailsendx_sync_is_configured()
-			&& class_exists( 'EmailSendX_API' )
-			&& method_exists( 'EmailSendX_API', 'instance' );
 	}
 
 	/* ─── Editor chrome ────────────────────────────────────────────── */

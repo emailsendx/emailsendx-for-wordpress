@@ -1981,35 +1981,46 @@
 
 .esx-int-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	gap: 14px;
-	margin-bottom: 14px;
+	grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+	gap: 16px;
+	margin-bottom: 16px;
 }
 
 .esx-int-card {
 	background: #fff;
 	border: 1px solid var(--esx-border);
-	border-radius: var(--esx-radius);
+	border-radius: 14px;
 	box-shadow: var(--esx-shadow-sm);
-	padding: 18px 18px 14px;
+	padding: 20px;
 	display: flex;
 	flex-direction: column;
-	transition: box-shadow 0.18s ease, border-color 0.18s ease;
+	transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 }
-.esx-int-card:hover { box-shadow: var(--esx-shadow-md); }
-.esx-int-card-active { border-color: rgba(39, 122, 255, 0.35); }
+.esx-int-card:hover {
+	transform: translateY(-2px);
+	box-shadow: var(--esx-shadow-md);
+	border-color: #cbd5e1;
+}
+/* Live integration gets a quiet green ring rather than a loud fill. */
+.esx-int-card-active {
+	border-color: rgba(16, 185, 129, 0.35);
+	box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.10), var(--esx-shadow-sm);
+}
 
+/* Logo + name only — the status lives in the footer so a long label can
+   never squeeze the title into a multi-line wrap. */
 .esx-int-head {
 	display: flex;
 	align-items: center;
 	gap: 12px;
+	margin-bottom: 14px;
 }
 
 .esx-int-logo {
 	flex: 0 0 auto;
-	width: 44px;
-	height: 44px;
-	border-radius: 10px;
+	width: 46px;
+	height: 46px;
+	border-radius: 12px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -2017,35 +2028,96 @@
 	font-weight: 700;
 	font-size: 15px;
 	letter-spacing: 0.02em;
-	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 6px rgba(15, 23, 42, 0.14);
 }
-.esx-int-logo-img {
-	background: #fff;
-	box-shadow: inset 0 0 0 1px var(--esx-border);
-	padding: 6px;
+/* Official brand marks are white SVGs sitting on the brand-colour tile —
+   same treatment as the monogram, so a brand with no official asset
+   (Divi, Beaver Builder) still reads as part of the same set. */
+.esx-int-logo-mark {
+	width: 24px;
+	height: 24px;
+	object-fit: contain;
+	display: block;
 }
-.esx-int-logo-img img { max-width: 100%; max-height: 100%; display: block; }
 
-.esx-int-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.esx-int-name { font-weight: 600; color: var(--esx-text); line-height: 1.25; }
-.esx-int-version { font-size: 12px; color: var(--esx-text-muted); margin-top: 2px; }
-.esx-int-status { flex: 0 0 auto; }
+.esx-int-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.esx-int-name {
+	font-weight: 600;
+	font-size: 14.5px;
+	color: var(--esx-text);
+	line-height: 1.3;
+}
+.esx-int-version {
+	font-size: 11.5px;
+	color: var(--esx-text-muted);
+	font-variant-numeric: tabular-nums;
+}
 
+/* flex:1 keeps every card in the row the same height regardless of copy. */
 .esx-int-desc {
-	margin: 14px 0 12px;
+	margin: 0 0 14px;
 	color: var(--esx-text-muted);
 	font-size: 13.5px;
-	line-height: 1.5;
+	line-height: 1.55;
+	flex: 1 1 auto;
+}
+
+.esx-int-hint {
+	margin: 0 0 14px;
+	padding: 9px 11px;
+	font-size: 12.5px;
+	line-height: 1.45;
+	color: #047857;
+	background: rgba(16, 185, 129, 0.08);
+	border: 1px solid rgba(16, 185, 129, 0.18);
+	border-radius: 9px;
 }
 
 .esx-int-foot {
 	margin-top: auto;
-	padding-top: 12px;
+	padding-top: 14px;
 	border-top: 1px solid var(--esx-border);
-	font-size: 13px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
 }
-.esx-int-hint { color: var(--esx-text-muted); }
-.esx-int-link { color: var(--esx-primary); text-decoration: none; font-weight: 600; }
+
+/* Status = dot + word. Compact enough to sit beside the action link. */
+.esx-int-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 12.5px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.esx-int-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	flex: 0 0 auto;
+}
+.esx-int-status--active { color: #047857; }
+.esx-int-status--active .esx-int-dot {
+	background: #10b981;
+	box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.16);
+}
+.esx-int-status--soon { color: var(--esx-primary); }
+.esx-int-status--soon .esx-int-dot {
+	background: var(--esx-primary);
+	box-shadow: 0 0 0 3px rgba(39, 122, 255, 0.16);
+}
+.esx-int-status--idle { color: var(--esx-text-muted); }
+.esx-int-status--idle .esx-int-dot { background: #cbd5e1; }
+
+.esx-int-link {
+	color: var(--esx-primary);
+	text-decoration: none;
+	font-weight: 600;
+	font-size: 12.5px;
+	white-space: nowrap;
+}
 .esx-int-link:hover { text-decoration: underline; }
 
 /* Shortcode snippets + the forms/lists reference tables. */

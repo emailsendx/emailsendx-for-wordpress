@@ -8,13 +8,19 @@
  */
 
 .esx-form {
+  /* Design tokens — every Style option writes into one of these, so the
+     stylesheet stays declarative and the options compose cleanly. */
   --esx-radius: 8px;
   --esx-border: #cbd5e1;
   --esx-accent: #6d28d9;
   --esx-accent-contrast: #ffffff;
   --esx-text-color: inherit;
+  --esx-field-bg: #ffffff;
+  --esx-field-color: #0f172a;
+  --esx-width: 480px;
+  --esx-gap: 0.75rem;
   --esx-muted: #64748b;
-  max-width: 480px;
+  max-width: var(--esx-width);
   margin: 1rem 0;
   font-size: 15px;
   line-height: 1.5;
@@ -40,7 +46,7 @@
 .esx-form__form {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--esx-gap);
   margin: 0;
 }
 
@@ -81,37 +87,80 @@
 }
 .esx-form__req { color: #dc2626; }
 
-.esx-form__input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--esx-border);
-  border-radius: var(--esx-radius);
+/* ── Fields & button ────────────────────────────────────────────────
+   WordPress themes style input/textarea/select/button aggressively, and
+   usually at HIGHER specificity than a bare class (e.g.
+   `.entry-content input[type="email"]` beats `.esx-form__input`). So the
+   selectors below are element-qualified AND the properties the Style
+   options drive are !important. Without this the theme silently wins and
+   the user's Style choices appear to do nothing — which is exactly what
+   happened: "Pill" reached the <textarea> (unstyled by the theme) but not
+   the <input>s. Everything else stays low-specificity so themes/Design
+   Options can still adjust the surrounding layout. */
+.esx-form input.esx-form__input,
+.esx-form textarea.esx-form__input,
+.esx-form select.esx-form__input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 0 !important;
+  padding: 0.6rem 0.75rem !important;
+  border: 1px solid var(--esx-border) !important;
+  border-radius: var(--esx-radius) !important;
+  /* Variables, not literals: !important keeps the host theme from winning,
+     while the value stays user-controlled (so a dark/tinted field is
+     possible). The "Text colour" option styles labels; --esx-field-color
+     styles the value inside the field. */
+  background: var(--esx-field-bg) !important;
+  color: var(--esx-field-color) !important;
   font: inherit;
-  color: inherit;
-  background: #fff;
-}
-.esx-form__input:focus {
-  outline: none;
-  border-color: var(--esx-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--esx-accent) 25%, transparent);
+  line-height: 1.45;
+  height: auto;
+  min-height: 0;
+  box-shadow: none;
+  text-transform: none;
 }
 
-.esx-form__submit {
+/* A pill radius on a multi-line box reads as a blob. Cap the textarea
+   while still honouring Square / Default / Rounded. */
+.esx-form textarea.esx-form__input {
+  border-radius: min(var(--esx-radius), 14px) !important;
+  min-height: 110px;
+  resize: vertical;
+}
+
+.esx-form input.esx-form__input:focus,
+.esx-form textarea.esx-form__input:focus,
+.esx-form select.esx-form__input:focus {
+  outline: none !important;
+  border-color: var(--esx-accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--esx-accent) 25%, transparent) !important;
+}
+
+.esx-form button.esx-form__submit {
   display: inline-block;
-  padding: 0.6rem 1.1rem;
-  border: 0;
-  border-radius: var(--esx-radius);
-  background: var(--esx-accent);
-  color: var(--esx-accent-contrast);
+  width: auto;
+  margin: 0;
+  padding: 0.6rem 1.1rem !important;
+  /* A TRANSPARENT 1px border (not `border: 0`) + the same line-height as the
+     field. Both boxes then resolve to an identical height, so the button and
+     the email input line up exactly in the inline newsletter layout — with
+     `border:0` the button came out 2px shorter than the bordered input. */
+  border: 1px solid transparent !important;
+  border-radius: var(--esx-radius) !important;
+  background: var(--esx-accent) !important;
+  color: var(--esx-accent-contrast) !important;
   font: inherit;
   font-weight: 600;
+  line-height: 1.45;
   cursor: pointer;
+  text-transform: none;
+  text-decoration: none;
+  box-shadow: none;
   transition: opacity 0.15s ease;
 }
 .esx-form__form--inline .esx-form__submit { flex: 0 0 auto; }
-.esx-form__submit:hover { opacity: 0.92; }
-.esx-form__submit:disabled { opacity: 0.6; cursor: default; }
+.esx-form button.esx-form__submit:hover { opacity: 0.92; }
+.esx-form button.esx-form__submit:disabled { opacity: 0.6; cursor: default; }
 
 .esx-form__status {
   margin: 0;
@@ -143,34 +192,84 @@
 
 /* ── Style options (WPBakery "Style" tab) ─────────────────────────── */
 
+/* These mirror the element-qualified + !important approach above for the
+   same reason: a theme's button/input rules would otherwise beat them. */
+
 /* Outline button. */
-.esx-form--outline .esx-form__submit {
-  background: transparent;
-  color: var(--esx-accent);
-  border: 1.5px solid var(--esx-accent);
+/* 1px (not 1.5px) so the outline button keeps the exact same box height as
+   the field it sits beside. */
+.esx-form--outline button.esx-form__submit {
+  background: transparent !important;
+  color: var(--esx-accent) !important;
+  border: 1px solid var(--esx-accent) !important;
 }
-.esx-form--outline .esx-form__submit:hover {
-  background: var(--esx-accent);
-  color: var(--esx-accent-contrast);
+.esx-form--outline button.esx-form__submit:hover {
+  background: var(--esx-accent) !important;
+  color: var(--esx-accent-contrast) !important;
   opacity: 1;
 }
 
 /* Full-width button. */
-.esx-form--btn-block .esx-form__submit { width: 100%; }
-.esx-form--btn-block .esx-form__form--inline .esx-form__submit,
-.esx-form--btn-block.esx-form--newsletter .esx-form__submit { flex: 1 1 100%; }
+.esx-form--btn-block button.esx-form__submit { width: 100% !important; }
+.esx-form--btn-block .esx-form__form--inline button.esx-form__submit { flex: 1 1 100%; }
 
-/* Size scale — compact + large. */
+/* Size scale — field padding, button padding and type scale move together
+   so a "Small" form is uniformly small, not just smaller text. */
 .esx-form--sm { font-size: 13.5px; }
-.esx-form--sm .esx-form__input,
-.esx-form--sm .esx-form__submit { padding: 0.45rem 0.7rem; }
-.esx-form--sm .esx-form__submit { padding-left: 0.9rem; padding-right: 0.9rem; }
+.esx-form--sm input.esx-form__input,
+.esx-form--sm textarea.esx-form__input,
+.esx-form--sm select.esx-form__input { padding: 0.45rem 0.7rem !important; }
+.esx-form--sm textarea.esx-form__input { min-height: 88px; }
+.esx-form--sm button.esx-form__submit { padding: 0.45rem 0.95rem !important; }
 
 .esx-form--lg { font-size: 17px; }
-.esx-form--lg .esx-form__input,
-.esx-form--lg .esx-form__submit { padding: 0.8rem 1rem; }
-.esx-form--lg .esx-form__submit { padding-left: 1.4rem; padding-right: 1.4rem; }
+.esx-form--lg input.esx-form__input,
+.esx-form--lg textarea.esx-form__input,
+.esx-form--lg select.esx-form__input { padding: 0.8rem 1rem !important; }
+.esx-form--lg textarea.esx-form__input { min-height: 132px; }
+.esx-form--lg button.esx-form__submit { padding: 0.8rem 1.4rem !important; }
 
-@media (prefers-color-scheme: dark) {
-  .esx-form__input { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+/* Field treatment — Outlined (default) | Filled | Underline.
+   Filled seeds a tinted default, but an explicit "Field background"
+   colour is written inline on the wrapper and therefore still wins. */
+.esx-form--filled { --esx-field-bg: #f1f5f9; }
+.esx-form--filled input.esx-form__input,
+.esx-form--filled textarea.esx-form__input,
+.esx-form--filled select.esx-form__input {
+  border-color: transparent !important;
 }
+
+.esx-form--underline input.esx-form__input,
+.esx-form--underline textarea.esx-form__input,
+.esx-form--underline select.esx-form__input {
+  border-width: 0 0 2px 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Labels hidden → placeholder-only, but still announced to screen readers
+   (visually hidden, not display:none — removing them outright would break
+   accessibility). */
+.esx-form--nolabels .esx-form__label {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Button alignment within the form (stacked layouts). */
+.esx-form--btn-left .esx-form__submit { align-self: flex-start; }
+.esx-form--btn-center .esx-form__submit { align-self: center; }
+.esx-form--btn-right .esx-form__submit { align-self: flex-end; }
+
+/* Field spacing. */
+.esx-form--compact { --esx-gap: 0.45rem; }
+.esx-form--relaxed { --esx-gap: 1.15rem; }
+

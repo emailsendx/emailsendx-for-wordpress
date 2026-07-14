@@ -197,6 +197,7 @@
     form.dataset.esxWired = '1';
 
     var listId = container.getAttribute('data-list');
+    var listToken = container.getAttribute('data-list-token') || '';
     var statusEl = form.querySelector('.esx-form__status');
     var successMsg = statusEl ? statusEl.getAttribute('data-success') : '';
     var url = CFG.subscribeUrl;
@@ -220,7 +221,7 @@
         return;
       }
 
-      var payload = { listId: listId, email: fields.email };
+      var payload = { listId: listId, listToken: listToken, email: fields.email };
       if (fields.firstName) payload.firstName = fields.firstName;
 
       setBusy(form, true);

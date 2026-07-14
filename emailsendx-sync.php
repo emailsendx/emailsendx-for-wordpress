@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       EmailSendX for WordPress
  * Plugin URI:        https://emailsendx.com/
- * Description:       Sync your WordPress users and WooCommerce customers to EmailSendX contact lists. Manual + automatic sync, custom field mapping, sync history.
- * Version:           1.2.2
+ * Description:       Sync WordPress users and WooCommerce customers to EmailSendX, and add opt-in forms and newsletter boxes to your pages — with native elements for WPBakery, Elementor, and the Block Editor (Spectra included).
+ * Version:           1.3.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            EmailSendX
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /* ─── Plugin constants ─────────────────────────────────────────────── */
 
-define( 'EMAILSENDX_SYNC_VERSION',  '1.2.2' );
+define( 'EMAILSENDX_SYNC_VERSION',  '1.3.0' );
 define( 'EMAILSENDX_SYNC_FILE',     __FILE__ );
 define( 'EMAILSENDX_SYNC_PATH',     plugin_dir_path( __FILE__ ) );
 define( 'EMAILSENDX_SYNC_URL',      plugin_dir_url( __FILE__ ) );
@@ -160,10 +160,16 @@ function emailsendx_sync_bootstrap() {
 	new EmailSendX_Forms();
 	new EmailSendX_Subscribe();
 
-	// WPBakery Page Builder adapter — maps the two shortcodes onto
-	// drag-and-drop elements. Self-guards on WPB_VC_VERSION, so it's an
-	// inert no-op unless WPBakery is active.
+	// Page-builder adapters — each maps the two shortcodes onto that
+	// builder's native elements. Both self-guard (WPBakery on
+	// WPB_VC_VERSION, Elementor on the `elementor/loaded` action), so each
+	// is an inert no-op unless its builder is active.
 	new EmailSendX_WPBakery();
+	new EmailSendX_Elementor();
+
+	// Block Editor adapter. Covers Spectra too — Spectra is itself a Gutenberg
+	// block plugin, so native blocks show up in its editor as well.
+	new EmailSendX_Gutenberg();
 
 	// Admin-only UI.
 	if ( is_admin() ) {

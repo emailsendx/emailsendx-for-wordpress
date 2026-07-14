@@ -108,10 +108,21 @@ class EmailSendX_Subscribe {
 			return self::err( __( 'Please enter a valid email address.', 'emailsendx-sync' ), 400 );
 		}
 
-		// 4. Target list.
+		// 4. Target list — must carry a valid signature.
+		//
+		//    SECURITY: the list id is public (it's in the page HTML), so on its
+		//    own it would let anyone POST subscribers into ANY list in the
+		//    workspace, not only the one the site owner chose to embed. Each
+		//    rendered form therefore ships a signature ({@see list_token()}),
+		//    and we reject any list the site didn't actually sign. An attacker
+		//    can replay a list the owner embedded, but cannot forge a new one.
 		$list_id = isset( $params['listId'] ) ? sanitize_text_field( (string) $params['listId'] ) : '';
+		$token   = isset( $params['listToken'] ) ? sanitize_text_field( (string) $params['listToken'] ) : '';
 		if ( '' === $list_id ) {
 			return self::err( __( 'This form is misconfigured (no list).', 'emailsendx-sync' ), 400 );
+		}
+		if ( ! hash_equals( self::list_token( $list_id ), $token ) ) {
+			return self::err( __( 'This form could not be verified.', 'emailsendx-sync' ), 403 );
 		}
 
 		if ( ! function_exists( 'emailsendx_sync_is_configured' ) || ! emailsendx_sync_is_configured() ) {
@@ -129,15 +140,12 @@ class EmailSendX_Subscribe {
 			$contact['firstName'] = $first;
 		}
 
-		$source = isset( $params['source'] ) ? sanitize_text_field( (string) $params['source'] ) : '';
-		if ( '' === $source ) {
-			$source = self::CONSENT_SOURCE;
-		}
-
+		// Consent source is set SERVER-SIDE, never taken from the request —
+		// a forgeable provenance string would undermine the consent record.
 		$res = EmailSendX_API::instance()->bulk_upsert_contacts(
 			array(
 				'listId'        => $list_id,
-				'consentSource' => $source,
+				'consentSource' => self::CONSENT_SOURCE,
 				'contacts'      => array( $contact ),
 			)
 		);
@@ -151,6 +159,20 @@ class EmailSendX_Subscribe {
 		return self::ok();
 	}
 
+	/**
+	 * Signature that proves a list was embedded BY THIS SITE.
+	 *
+	 * Keyed on the site's auth salt, so it's stable across requests but not
+	 * forgeable without the secret. The newsletter shortcode emits this
+	 * alongside the list id, and {@see handle()} requires it. ShaonPro.
+	 *
+	 * @param string $list_id List id.
+	 * @return string
+	 */
+	public static function list_token( $list_id ) {
+		return hash_hmac( 'sha256', 'esx_list:' . (string) $list_id, wp_salt( 'auth' ) );
+	}
+
 	/* ─── Helpers ──────────────────────────────────────────────────── */
 
 	/**
@@ -159,26 +181,70 @@ class EmailSendX_Subscribe {
 	 * @return bool True if the caller is over the limit.
 	 */
 	protected static function is_rate_limited() {
-		$ip  = self::client_ip();
-		$key = 'emailsendx_sub_rl_' . md5( $ip );
-
-		$count = (int) get_transient( $key );
-		if ( $count >= self::RL_MAX ) {
+		// Per-IP cap.
+		if ( self::bump_window( 'emailsendx_sub_rl_' . md5( self::client_ip() ), self::RL_MAX ) ) {
 			return true;
 		}
-		// First hit in the window seeds the TTL; subsequent hits bump the
-		// count but keep the original expiry (fixed window).
-		set_transient( $key, $count + 1, self::RL_WINDOW );
+
+		// Global cap — defence in depth. Even if an attacker rotates IPs
+		// (e.g. through a proxy pool), the endpoint as a whole can't be used
+		// to inject more than this many contacts per window. Generous by
+		// default; a high-traffic site can raise it.
+		$global_max = (int) apply_filters( 'emailsendx_subscribe_global_limit', 120 );
+		if ( self::bump_window( 'emailsendx_sub_rl_global', $global_max ) ) {
+			return true;
+		}
+
 		return false;
 	}
 
 	/**
-	 * Best-effort client IP, honouring a single proxy hop.
+	 * Fixed-window counter. Returns true when the window is already at/over
+	 * the cap. Stores {count, expires} so the window does NOT slide — the
+	 * expiry is set once and preserved until it lapses.
+	 *
+	 * @param string $key Transient key.
+	 * @param int    $max Cap for the window.
+	 * @return bool Over the cap?
+	 */
+	protected static function bump_window( $key, $max ) {
+		$now  = time();
+		$data = get_transient( $key );
+
+		if ( ! is_array( $data ) || empty( $data['exp'] ) || $data['exp'] <= $now ) {
+			$data = array( 'c' => 0, 'exp' => $now + self::RL_WINDOW );
+		}
+
+		if ( $data['c'] >= $max ) {
+			return true;
+		}
+
+		$data['c']++;
+		set_transient( $key, $data, max( 1, $data['exp'] - $now ) );
+		return false;
+	}
+
+	/**
+	 * Client IP for rate limiting.
+	 *
+	 * SECURITY: `REMOTE_ADDR` is the only value the web server actually
+	 * observed and cannot be spoofed. `X-Forwarded-For` is a request header —
+	 * on a site reachable directly, a caller can set a fresh one per request
+	 * and defeat a per-IP limit entirely — so we ignore it UNLESS REMOTE_ADDR
+	 * is a proxy the site owner has explicitly declared trusted (Cloudflare, a
+	 * load balancer, etc.) via the `emailsendx_trusted_proxies` filter. Only
+	 * then is the left-most XFF entry meaningful.
 	 *
 	 * @return string
 	 */
 	protected static function client_ip() {
-		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+		$remote = ! empty( $_SERVER['REMOTE_ADDR'] )
+			? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) )
+			: 'unknown';
+
+		$trusted = (array) apply_filters( 'emailsendx_trusted_proxies', array() );
+
+		if ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) && in_array( $remote, $trusted, true ) ) {
 			$xff   = sanitize_text_field( wp_unslash( $_SERVER['HTTP_X_FORWARDED_FOR'] ) );
 			$parts = explode( ',', $xff );
 			$first = trim( $parts[0] );
@@ -186,10 +252,8 @@ class EmailSendX_Subscribe {
 				return $first;
 			}
 		}
-		if ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
-			return sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) );
-		}
-		return 'unknown';
+
+		return $remote;
 	}
 
 	/**

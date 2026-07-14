@@ -169,6 +169,14 @@ class EmailSendX_Forms {
 				'button_style' => '',   // '', outline.
 				'button_full'  => '',   // 'yes' → full-width button.
 				'size'         => '',   // '', small, large.
+				'width'        => '',   // '', narrow, wide, full → --esx-width.
+				'field_bg'     => '',   // Field background → --esx-field-bg.
+				'field_color'  => '',   // Field text → --esx-field-color.
+				'border_color' => '',   // Field border → --esx-border.
+				'field_style'  => '',   // '', filled, underline.
+				'labels'       => '',   // '', hidden (placeholder-only).
+				'button_align' => '',   // '', left, center, right.
+				'spacing'      => '',   // '', compact, relaxed.
 				'css'          => '',   // WPBakery Design Options payload.
 				'class'        => '',
 			),
@@ -272,6 +280,14 @@ class EmailSendX_Forms {
 				'button_style' => '',    // '', outline.
 				'button_full' => '',     // 'yes' → full-width button.
 				'size'        => '',     // '', small, large.
+				'width'       => '',     // '', narrow, wide, full → --esx-width.
+				'field_bg'    => '',     // Field background → --esx-field-bg.
+				'field_color' => '',     // Field text → --esx-field-color.
+				'border_color' => '',    // Field border → --esx-border.
+				'field_style' => '',     // '', filled, underline.
+				'labels'      => '',     // '', hidden (placeholder-only).
+				'button_align' => '',    // '', left, center, right.
+				'spacing'     => '',     // '', compact, relaxed.
 				'css'         => '',     // WPBakery Design Options payload.
 				'class'       => '',
 			),
@@ -293,6 +309,9 @@ class EmailSendX_Forms {
 		$data = array(
 			'data-esx-newsletter' => '1',
 			'data-list'           => $list_id,
+			// Proves this site embedded this list — the subscribe endpoint
+			// rejects any list without a matching signature.
+			'data-list-token'     => class_exists( 'EmailSendX_Subscribe' ) ? EmailSendX_Subscribe::list_token( $list_id ) : '',
 		);
 
 		ob_start();
@@ -488,6 +507,33 @@ class EmailSendX_Forms {
 			$classes[] = 'esx-form--lg';
 		}
 
+		// Field treatment: outlined (default) | filled | underline.
+		$field_style = isset( $atts['field_style'] ) ? strtolower( trim( (string) $atts['field_style'] ) ) : '';
+		if ( 'filled' === $field_style ) {
+			$classes[] = 'esx-form--filled';
+		} elseif ( 'underline' === $field_style ) {
+			$classes[] = 'esx-form--underline';
+		}
+
+		// Labels hidden → placeholder-only (still exposed to screen readers).
+		if ( isset( $atts['labels'] ) && 'hidden' === strtolower( trim( (string) $atts['labels'] ) ) ) {
+			$classes[] = 'esx-form--nolabels';
+		}
+
+		// Button alignment within the form.
+		$btn_align = isset( $atts['button_align'] ) ? strtolower( trim( (string) $atts['button_align'] ) ) : '';
+		if ( in_array( $btn_align, array( 'left', 'center', 'right' ), true ) ) {
+			$classes[] = 'esx-form--btn-' . $btn_align;
+		}
+
+		// Field spacing.
+		$spacing = isset( $atts['spacing'] ) ? strtolower( trim( (string) $atts['spacing'] ) ) : '';
+		if ( 'compact' === $spacing ) {
+			$classes[] = 'esx-form--compact';
+		} elseif ( 'relaxed' === $spacing ) {
+			$classes[] = 'esx-form--relaxed';
+		}
+
 		if ( ! empty( $atts['class'] ) ) {
 			$classes[] = sanitize_html_class( (string) $atts['class'] ) ?: '';
 		}
@@ -514,11 +560,17 @@ class EmailSendX_Forms {
 	protected static function inline_style( $atts ) {
 		$vars = array();
 
-		// Colour custom properties (accent, button text, body text).
+		// Colour custom properties. Field colours are variables (rather than
+		// hardcoded) so a user can build a dark/tinted form — the stylesheet
+		// still marks them !important so the host theme can't win, but the
+		// value itself stays user-controlled.
 		$colour_map = array(
 			'accent'       => '--esx-accent',
 			'button_color' => '--esx-accent-contrast',
 			'text_color'   => '--esx-text-color',
+			'field_bg'     => '--esx-field-bg',
+			'field_color'  => '--esx-field-color',
+			'border_color' => '--esx-border',
 		);
 		foreach ( $colour_map as $att => $var ) {
 			if ( empty( $atts[ $att ] ) ) {
@@ -538,10 +590,37 @@ class EmailSendX_Forms {
 			}
 		}
 
+		// Width keyword → max-width.
+		if ( ! empty( $atts['width'] ) ) {
+			$width = self::width_value( (string) $atts['width'] );
+			if ( '' !== $width ) {
+				$vars[] = '--esx-width:' . $width;
+			}
+		}
+
 		if ( empty( $vars ) ) {
 			return '';
 		}
 		return ' style="' . esc_attr( implode( ';', $vars ) . ';' ) . '"';
+	}
+
+	/**
+	 * Map a width keyword to a max-width. Empty = stylesheet default.
+	 *
+	 * @param string $keyword 'narrow' | 'wide' | 'full' | ''.
+	 * @return string
+	 */
+	protected static function width_value( $keyword ) {
+		switch ( strtolower( trim( (string) $keyword ) ) ) {
+			case 'narrow':
+				return '360px';
+			case 'wide':
+				return '640px';
+			case 'full':
+				return '100%';
+			default:
+				return '';
+		}
 	}
 
 	/**
@@ -572,12 +651,29 @@ class EmailSendX_Forms {
 	 */
 	protected static function sanitize_color( $value ) {
 		$value = trim( (string) $value );
-		if ( preg_match( '/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', $value ) ) {
+
+		// #rgb / #rgba / #rrggbb / #rrggbbaa
+		if ( preg_match( '/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', $value ) ) {
 			return $value;
 		}
-		if ( preg_match( '/^rgba?\(\s*[0-9.,\s%]+\)$/i', $value ) ) {
+
+		// rgb() / rgba() / hsl() / hsla()
+		if ( preg_match( '#^(?:rgba?|hsla?)\(\s*[0-9.,\s%/-]+\)$#i', $value ) ) {
 			return $value;
 		}
+
+		// A CSS custom property, e.g. var(--ast-global-color-0).
+		//
+		// This is what the block editor's colour palette hands back for THEME
+		// colours (Astra, and any theme.json palette) rather than a hex — so
+		// without this branch every theme-palette pick was silently rejected
+		// and the colour appeared to "do nothing". The character class stays
+		// tight (no ; { } ) so a value can't break out of the inline style
+		// it gets interpolated into.
+		if ( preg_match( '/^var\(\s*--[A-Za-z0-9_-]+\s*(?:,\s*[^;{}()]+)?\)$/', $value ) ) {
+			return $value;
+		}
+
 		return '';
 	}
 
