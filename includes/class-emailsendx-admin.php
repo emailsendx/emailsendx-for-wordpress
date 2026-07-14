@@ -115,15 +115,7 @@ class EmailSendX_Admin {
 					<div class="esx-header-text">
 						<h1 class="esx-header-title"><?php echo esc_html__( 'EmailSendX for WordPress', 'emailsendx-sync' ); ?></h1>
 						<p class="esx-header-subtitle">
-							<?php
-							echo esc_html(
-								sprintf(
-									/* translators: %s: plugin version */
-									__( 'EmailSendX · v%s', 'emailsendx-sync' ),
-									EMAILSENDX_SYNC_VERSION
-								)
-							);
-							?>
+							<?php echo esc_html__( 'Sync, forms & newsletters for WordPress', 'emailsendx-sync' ); ?>
 						</p>
 					</div>
 				</div>
@@ -189,8 +181,6 @@ class EmailSendX_Admin {
 				</span>
 				<div class="esx-footer-text">
 					<a href="https://emailsendx.com" target="_blank" rel="noopener noreferrer" class="esx-footer-link">EmailSendX</a>
-					<span class="esx-footer-sep">·</span>
-					<span class="esx-footer-version">v<?php echo esc_html( EMAILSENDX_SYNC_VERSION ); ?></span>
 					<span class="esx-footer-sep">·</span>
 					<a href="https://emailsendx.com/docs/" target="_blank" rel="noopener noreferrer" class="esx-footer-link"><?php echo esc_html__( 'Docs', 'emailsendx-sync' ); ?></a>
 					<span class="esx-footer-sep">·</span>

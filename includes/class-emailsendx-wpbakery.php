@@ -119,8 +119,6 @@ class EmailSendX_WPBakery {
 			return;
 		}
 
-		$design_group = esc_html__( 'Design Options', 'emailsendx-sync' );
-
 		$align_values = array(
 			esc_html__( 'Default', 'emailsendx-sync' ) => '',
 			esc_html__( 'Left', 'emailsendx-sync' )    => 'left',
@@ -136,6 +134,91 @@ class EmailSendX_WPBakery {
 		$forms_help    = self::picker_description( 'forms' );
 		$lists_help    = self::picker_description( 'lists' );
 
+		// Shared "Style" tab — identical controls on both elements. Each
+		// maps to a CSS variable or modifier class on the shortcode wrapper
+		// ({@see EmailSendX_Forms::inline_style()} / wrap_classes()).
+		$style_group  = esc_html__( 'Style', 'emailsendx-sync' );
+		$style_params = array(
+			array(
+				'type'       => 'dropdown',
+				'heading'    => esc_html__( 'Alignment', 'emailsendx-sync' ),
+				'param_name' => 'align',
+				'value'      => $align_values,
+				'std'        => '',
+				'group'      => $style_group,
+			),
+			array(
+				'type'       => 'dropdown',
+				'heading'    => esc_html__( 'Size', 'emailsendx-sync' ),
+				'param_name' => 'size',
+				'value'      => array(
+					esc_html__( 'Default', 'emailsendx-sync' ) => '',
+					esc_html__( 'Small', 'emailsendx-sync' )   => 'small',
+					esc_html__( 'Large', 'emailsendx-sync' )   => 'large',
+				),
+				'std'        => '',
+				'group'      => $style_group,
+			),
+			array(
+				'type'       => 'dropdown',
+				'heading'    => esc_html__( 'Corner radius', 'emailsendx-sync' ),
+				'param_name' => 'radius',
+				'value'      => array(
+					esc_html__( 'Default', 'emailsendx-sync' ) => '',
+					esc_html__( 'Rounded', 'emailsendx-sync' ) => 'rounded',
+					esc_html__( 'Pill', 'emailsendx-sync' )    => 'pill',
+					esc_html__( 'Square', 'emailsendx-sync' )  => 'square',
+				),
+				'std'        => '',
+				'group'      => $style_group,
+			),
+			array(
+				'type'        => 'colorpicker',
+				'heading'     => esc_html__( 'Accent colour', 'emailsendx-sync' ),
+				'param_name'  => 'accent',
+				'description' => esc_html__( 'Button background + input focus ring.', 'emailsendx-sync' ),
+				'group'       => $style_group,
+			),
+			array(
+				'type'       => 'colorpicker',
+				'heading'    => esc_html__( 'Button text colour', 'emailsendx-sync' ),
+				'param_name' => 'button_color',
+				'group'      => $style_group,
+			),
+			array(
+				'type'       => 'dropdown',
+				'heading'    => esc_html__( 'Button style', 'emailsendx-sync' ),
+				'param_name' => 'button_style',
+				'value'      => array(
+					esc_html__( 'Solid', 'emailsendx-sync' )   => '',
+					esc_html__( 'Outline', 'emailsendx-sync' ) => 'outline',
+				),
+				'std'        => '',
+				'group'      => $style_group,
+			),
+			array(
+				'type'       => 'checkbox',
+				'heading'    => esc_html__( 'Full-width button', 'emailsendx-sync' ),
+				'param_name' => 'button_full',
+				'value'      => array( esc_html__( 'Yes', 'emailsendx-sync' ) => 'yes' ),
+				'group'      => $style_group,
+			),
+			array(
+				'type'        => 'colorpicker',
+				'heading'     => esc_html__( 'Text colour', 'emailsendx-sync' ),
+				'param_name'  => 'text_color',
+				'description' => esc_html__( 'Labels + helper text.', 'emailsendx-sync' ),
+				'group'       => $style_group,
+			),
+		);
+
+		$css_param = array(
+			'type'       => 'css_editor',
+			'heading'    => esc_html__( 'Design Options', 'emailsendx-sync' ),
+			'param_name' => 'css',
+			'group'      => esc_html__( 'Design Options', 'emailsendx-sync' ),
+		);
+
 		/* ── EmailSendX Form ──────────────────────────────────────── */
 		vc_map(
 			array(
@@ -145,35 +228,20 @@ class EmailSendX_WPBakery {
 				'weight'      => 1010, // With boost_lead_elements(), seats this at the start of row 2.
 				'icon'        => 'esx-vc-icon',
 				'description' => esc_html__( 'Embed an opt-in form.', 'emailsendx-sync' ),
-				'params'      => array(
+				'params'      => array_merge(
 					array(
-						'type'        => 'dropdown',
-						'heading'     => esc_html__( 'Form', 'emailsendx-sync' ),
-						'param_name'  => 'id',
-						'value'       => $forms_options,
-						'std'         => '',
-						'admin_label' => true,
-						'description' => $forms_help,
+						array(
+							'type'        => 'dropdown',
+							'heading'     => esc_html__( 'Form', 'emailsendx-sync' ),
+							'param_name'  => 'id',
+							'value'       => $forms_options,
+							'std'         => '',
+							'admin_label' => true,
+							'description' => $forms_help,
+						),
 					),
-					array(
-						'type'       => 'dropdown',
-						'heading'    => esc_html__( 'Alignment', 'emailsendx-sync' ),
-						'param_name' => 'align',
-						'value'      => $align_values,
-						'std'        => '',
-					),
-					array(
-						'type'       => 'colorpicker',
-						'heading'    => esc_html__( 'Accent colour', 'emailsendx-sync' ),
-						'param_name' => 'accent',
-						'description' => esc_html__( 'Recolours the submit button and focus ring.', 'emailsendx-sync' ),
-					),
-					array(
-						'type'       => 'css_editor',
-						'heading'    => $design_group,
-						'param_name' => 'css',
-						'group'      => $design_group,
-					),
+					$style_params,
+					array( $css_param )
 				),
 			)
 		);
@@ -187,7 +255,8 @@ class EmailSendX_WPBakery {
 				'weight'      => 1009, // Directly beneath the Form element (row 2).
 				'icon'        => 'esx-vc-icon',
 				'description' => esc_html__( 'Quick subscribe box.', 'emailsendx-sync' ),
-				'params'      => array(
+				'params'      => array_merge(
+					array(
 					array(
 						'type'        => 'dropdown',
 						'heading'     => esc_html__( 'Contact list', 'emailsendx-sync' ),
@@ -240,25 +309,9 @@ class EmailSendX_WPBakery {
 						'description' => esc_html__( 'Optional line shown under the form — e.g. how to unsubscribe.', 'emailsendx-sync' ),
 						'value'      => '',
 					),
-					array(
-						'type'       => 'dropdown',
-						'heading'    => esc_html__( 'Alignment', 'emailsendx-sync' ),
-						'param_name' => 'align',
-						'value'      => $align_values,
-						'std'        => '',
 					),
-					array(
-						'type'       => 'colorpicker',
-						'heading'    => esc_html__( 'Accent colour', 'emailsendx-sync' ),
-						'param_name' => 'accent',
-						'description' => esc_html__( 'Recolours the submit button and focus ring.', 'emailsendx-sync' ),
-					),
-					array(
-						'type'       => 'css_editor',
-						'heading'    => $design_group,
-						'param_name' => 'css',
-						'group'      => $design_group,
-					),
+					$style_params,
+					array( $css_param )
 				),
 			)
 		);

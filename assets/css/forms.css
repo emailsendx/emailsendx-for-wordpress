@@ -12,11 +12,13 @@
   --esx-border: #cbd5e1;
   --esx-accent: #6d28d9;
   --esx-accent-contrast: #ffffff;
+  --esx-text-color: inherit;
   --esx-muted: #64748b;
   max-width: 480px;
   margin: 1rem 0;
   font-size: 15px;
   line-height: 1.5;
+  color: var(--esx-text-color);
 }
 
 .esx-form--center { margin-left: auto; margin-right: auto; text-align: center; }
@@ -138,6 +140,36 @@
 }
 
 .esx-form__form--busy { opacity: 0.85; }
+
+/* ── Style options (WPBakery "Style" tab) ─────────────────────────── */
+
+/* Outline button. */
+.esx-form--outline .esx-form__submit {
+  background: transparent;
+  color: var(--esx-accent);
+  border: 1.5px solid var(--esx-accent);
+}
+.esx-form--outline .esx-form__submit:hover {
+  background: var(--esx-accent);
+  color: var(--esx-accent-contrast);
+  opacity: 1;
+}
+
+/* Full-width button. */
+.esx-form--btn-block .esx-form__submit { width: 100%; }
+.esx-form--btn-block .esx-form__form--inline .esx-form__submit,
+.esx-form--btn-block.esx-form--newsletter .esx-form__submit { flex: 1 1 100%; }
+
+/* Size scale — compact + large. */
+.esx-form--sm { font-size: 13.5px; }
+.esx-form--sm .esx-form__input,
+.esx-form--sm .esx-form__submit { padding: 0.45rem 0.7rem; }
+.esx-form--sm .esx-form__submit { padding-left: 0.9rem; padding-right: 0.9rem; }
+
+.esx-form--lg { font-size: 17px; }
+.esx-form--lg .esx-form__input,
+.esx-form--lg .esx-form__submit { padding: 0.8rem 1rem; }
+.esx-form--lg .esx-form__submit { padding-left: 1.4rem; padding-right: 1.4rem; }
 
 @media (prefers-color-scheme: dark) {
   .esx-form__input { background: #0f172a; color: #e2e8f0; border-color: #334155; }

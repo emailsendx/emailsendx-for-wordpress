@@ -160,11 +160,17 @@ class EmailSendX_Forms {
 	public static function render_form( $atts ) {
 		$atts = shortcode_atts(
 			array(
-				'id'     => '',
-				'align'  => '',   // '', 'left', 'center', 'right' — used by the builder adapter.
-				'accent' => '',   // Accent colour → --esx-accent.
-				'css'    => '',   // WPBakery Design Options payload (applied when the builder is active).
-				'class'  => '',
+				'id'           => '',
+				'align'        => '',   // '', 'left', 'center', 'right'.
+				'accent'       => '',   // Accent colour → --esx-accent.
+				'button_color' => '',   // Button text colour → --esx-accent-contrast.
+				'text_color'   => '',   // Body/label colour → --esx-text-color.
+				'radius'       => '',   // '', rounded, pill, square → --esx-radius.
+				'button_style' => '',   // '', outline.
+				'button_full'  => '',   // 'yes' → full-width button.
+				'size'         => '',   // '', small, large.
+				'css'          => '',   // WPBakery Design Options payload.
+				'class'        => '',
 			),
 			is_array( $atts ) ? $atts : array(),
 			'emailsendx_form'
@@ -260,6 +266,12 @@ class EmailSendX_Forms {
 				'consent'     => '',     // Optional consent line shown under the form.
 				'align'       => '',
 				'accent'      => '',     // Accent colour → --esx-accent.
+				'button_color' => '',    // Button text colour → --esx-accent-contrast.
+				'text_color'  => '',     // Body/label colour → --esx-text-color.
+				'radius'      => '',     // '', rounded, pill, square → --esx-radius.
+				'button_style' => '',    // '', outline.
+				'button_full' => '',     // 'yes' → full-width button.
+				'size'        => '',     // '', small, large.
 				'css'         => '',     // WPBakery Design Options payload.
 				'class'       => '',
 			),
@@ -459,6 +471,23 @@ class EmailSendX_Forms {
 		if ( in_array( $align, array( 'left', 'center', 'right' ), true ) ) {
 			$classes[] = 'esx-form--' . $align;
 		}
+
+		// Button style: outline variant.
+		if ( isset( $atts['button_style'] ) && 'outline' === strtolower( trim( (string) $atts['button_style'] ) ) ) {
+			$classes[] = 'esx-form--outline';
+		}
+		// Full-width button (checkbox → 'yes').
+		if ( isset( $atts['button_full'] ) && 'yes' === strtolower( trim( (string) $atts['button_full'] ) ) ) {
+			$classes[] = 'esx-form--btn-block';
+		}
+		// Size scale.
+		$size = isset( $atts['size'] ) ? strtolower( trim( (string) $atts['size'] ) ) : '';
+		if ( 'small' === $size ) {
+			$classes[] = 'esx-form--sm';
+		} elseif ( 'large' === $size ) {
+			$classes[] = 'esx-form--lg';
+		}
+
 		if ( ! empty( $atts['class'] ) ) {
 			$classes[] = sanitize_html_class( (string) $atts['class'] ) ?: '';
 		}
@@ -483,15 +512,56 @@ class EmailSendX_Forms {
 	 * @return string
 	 */
 	protected static function inline_style( $atts ) {
-		$accent = isset( $atts['accent'] ) ? trim( (string) $atts['accent'] ) : '';
-		if ( '' === $accent ) {
+		$vars = array();
+
+		// Colour custom properties (accent, button text, body text).
+		$colour_map = array(
+			'accent'       => '--esx-accent',
+			'button_color' => '--esx-accent-contrast',
+			'text_color'   => '--esx-text-color',
+		);
+		foreach ( $colour_map as $att => $var ) {
+			if ( empty( $atts[ $att ] ) ) {
+				continue;
+			}
+			$safe = self::sanitize_color( (string) $atts[ $att ] );
+			if ( '' !== $safe ) {
+				$vars[] = $var . ':' . $safe;
+			}
+		}
+
+		// Corner radius keyword → value.
+		if ( ! empty( $atts['radius'] ) ) {
+			$radius = self::radius_value( (string) $atts['radius'] );
+			if ( '' !== $radius ) {
+				$vars[] = '--esx-radius:' . $radius;
+			}
+		}
+
+		if ( empty( $vars ) ) {
 			return '';
 		}
-		$safe = self::sanitize_color( $accent );
-		if ( '' === $safe ) {
-			return '';
+		return ' style="' . esc_attr( implode( ';', $vars ) . ';' ) . '"';
+	}
+
+	/**
+	 * Map a corner-radius keyword to a CSS length. Empty = leave the
+	 * stylesheet default in place.
+	 *
+	 * @param string $keyword 'rounded' | 'pill' | 'square' | ''.
+	 * @return string
+	 */
+	protected static function radius_value( $keyword ) {
+		switch ( strtolower( trim( (string) $keyword ) ) ) {
+			case 'square':
+				return '0';
+			case 'rounded':
+				return '14px';
+			case 'pill':
+				return '999px';
+			default:
+				return ''; // 'default'/'' → no override.
 		}
-		return ' style="--esx-accent:' . esc_attr( $safe ) . ';"';
 	}
 
 	/**
