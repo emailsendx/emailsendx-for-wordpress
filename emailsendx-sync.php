@@ -154,6 +154,17 @@ function emailsendx_sync_bootstrap() {
 	new EmailSendX_Log();
 	new EmailSendX_Notices();
 
+	// Front-end opt-in forms (shortcodes + subscribe proxy). Registered
+	// on every request — shortcodes render on the front end and the REST
+	// subscribe route must exist for logged-out visitors.
+	new EmailSendX_Forms();
+	new EmailSendX_Subscribe();
+
+	// WPBakery Page Builder adapter — maps the two shortcodes onto
+	// drag-and-drop elements. Self-guards on WPB_VC_VERSION, so it's an
+	// inert no-op unless WPBakery is active.
+	new EmailSendX_WPBakery();
+
 	// Admin-only UI.
 	if ( is_admin() ) {
 		new EmailSendX_Admin();

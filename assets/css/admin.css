@@ -1976,3 +1976,109 @@
 	.esx-notice { flex-direction: column; }
 	.esx-notice-actions { margin-top: 10px; }
 }
+
+/* ─── Integrations tab ─────────────────────────────────────────────── */
+
+.esx-int-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 14px;
+	margin-bottom: 14px;
+}
+
+.esx-int-card {
+	background: #fff;
+	border: 1px solid var(--esx-border);
+	border-radius: var(--esx-radius);
+	box-shadow: var(--esx-shadow-sm);
+	padding: 18px 18px 14px;
+	display: flex;
+	flex-direction: column;
+	transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.esx-int-card:hover { box-shadow: var(--esx-shadow-md); }
+.esx-int-card-active { border-color: rgba(39, 122, 255, 0.35); }
+
+.esx-int-head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.esx-int-logo {
+	flex: 0 0 auto;
+	width: 44px;
+	height: 44px;
+	border-radius: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	font-weight: 700;
+	font-size: 15px;
+	letter-spacing: 0.02em;
+	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+.esx-int-logo-img {
+	background: #fff;
+	box-shadow: inset 0 0 0 1px var(--esx-border);
+	padding: 6px;
+}
+.esx-int-logo-img img { max-width: 100%; max-height: 100%; display: block; }
+
+.esx-int-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.esx-int-name { font-weight: 600; color: var(--esx-text); line-height: 1.25; }
+.esx-int-version { font-size: 12px; color: var(--esx-text-muted); margin-top: 2px; }
+.esx-int-status { flex: 0 0 auto; }
+
+.esx-int-desc {
+	margin: 14px 0 12px;
+	color: var(--esx-text-muted);
+	font-size: 13.5px;
+	line-height: 1.5;
+}
+
+.esx-int-foot {
+	margin-top: auto;
+	padding-top: 12px;
+	border-top: 1px solid var(--esx-border);
+	font-size: 13px;
+}
+.esx-int-hint { color: var(--esx-text-muted); }
+.esx-int-link { color: var(--esx-primary); text-decoration: none; font-weight: 600; }
+.esx-int-link:hover { text-decoration: underline; }
+
+/* Shortcode snippets + the forms/lists reference tables. */
+.esx-code {
+	display: inline-block;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 13px;
+	background: #f1f5f9;
+	color: #0f172a;
+	border: 1px solid var(--esx-border);
+	border-radius: var(--esx-radius-sm);
+	padding: 8px 12px;
+	user-select: all;
+}
+.esx-code-inline { padding: 4px 8px; font-size: 12.5px; }
+
+.esx-int-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 6px;
+}
+.esx-int-table th,
+.esx-int-table td {
+	text-align: left;
+	padding: 10px 8px;
+	border-bottom: 1px solid var(--esx-border);
+	vertical-align: middle;
+}
+.esx-int-table th {
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--esx-text-muted);
+	font-weight: 600;
+}
+.esx-int-table tbody tr:last-child td { border-bottom: 0; }

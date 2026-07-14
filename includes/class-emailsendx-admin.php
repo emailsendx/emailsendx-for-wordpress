@@ -208,10 +208,13 @@ class EmailSendX_Admin {
 	 */
 	public static function get_tabs() {
 		return array(
-			'sync'     => __( 'Sync', 'emailsendx-sync' ),
-			'mapping'  => __( 'Field Mapping', 'emailsendx-sync' ),
-			'log'      => __( 'Log', 'emailsendx-sync' ),
-			'settings' => __( 'Settings', 'emailsendx-sync' ),
+			'sync'         => __( 'Sync', 'emailsendx-sync' ),
+			'forms'        => __( 'Forms', 'emailsendx-sync' ),
+			'newsletter'   => __( 'Newsletter', 'emailsendx-sync' ),
+			'integrations' => __( 'Integrations', 'emailsendx-sync' ),
+			'mapping'      => __( 'Field Mapping', 'emailsendx-sync' ),
+			'log'          => __( 'Log', 'emailsendx-sync' ),
+			'settings'     => __( 'Settings', 'emailsendx-sync' ),
 		);
 	}
 

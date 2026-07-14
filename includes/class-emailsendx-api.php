@@ -131,6 +131,48 @@ class EmailSendX_API {
 	}
 
 	/**
+	 * GET /api/v1/forms — list the workspace's opt-in forms.
+	 *
+	 * Powers the "EmailSendX Form" element's picker. Gated server-side
+	 * on the `lists:read` scope (which every plugin key already carries),
+	 * so no key regeneration is needed. ShaonPro.
+	 *
+	 * @param int $page  Page number (1-indexed).
+	 * @param int $limit Per-page limit (max 100 server-side).
+	 * @return array|WP_Error
+	 */
+	public function get_forms( $page = 1, $limit = 100 ) {
+		$page  = max( 1, (int) $page );
+		$limit = max( 1, min( 100, (int) $limit ) );
+		$path  = '/api/v1/forms?page=' . $page . '&limit=' . $limit;
+		return $this->request( 'GET', $path );
+	}
+
+	/**
+	 * GET /api/widget/forms/{id} — the PUBLIC render config for one form
+	 * (field descriptors + display settings + anti-spam options).
+	 *
+	 * This is the same CORS-open feed the hosted widget consumes, so a
+	 * server-side render stays in lock-step with edits made in the
+	 * EmailSendX form builder. The endpoint is public; the Bearer header
+	 * this client always sends is simply ignored by it. ShaonPro.
+	 *
+	 * @param string $id Form id (cuid).
+	 * @return array|WP_Error
+	 */
+	public function get_form_config( $id ) {
+		$id = trim( (string) $id );
+		if ( '' === $id ) {
+			return new WP_Error(
+				'emailsendx_api',
+				__( 'A form id is required.', 'emailsendx-sync' ),
+				array( 'status' => 0 )
+			);
+		}
+		return $this->request( 'GET', '/api/widget/forms/' . rawurlencode( $id ) );
+	}
+
+	/**
 	 * POST /api/v1/lists.
 	 *
 	 * @param string $name        List name.
