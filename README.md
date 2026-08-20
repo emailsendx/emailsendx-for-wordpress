@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/emailsendx/emailsendx-for-wordpress/releases/latest"><img src="https://img.shields.io/github/v/release/emailsendx/emailsendx-for-wordpress?label=version&color=277AFF" alt="Latest release"></a>
+  <a href="https://github.com/emailsendx/emailsendx-for-wordpress/releases/latest"><img src="https://img.shields.io/github/v/release/emailsendx/emailsendx-for-wordpress?label=version&color=277AFF" alt="Latest release (source archive)"></a>
   <img src="https://img.shields.io/badge/WordPress-6.0%2B-21759b?logo=wordpress&logoColor=white" alt="WordPress 6.0+">
   <img src="https://img.shields.io/badge/PHP-7.4%2B-777bb4?logo=php&logoColor=white" alt="PHP 7.4+">
   <img src="https://img.shields.io/badge/license-GPLv2-blue" alt="GPLv2">
@@ -58,7 +58,7 @@ It works the same for content sites, membership sites, and WooCommerce stores. W
 
 ## Install
 
-1. **Download** the latest [`emailsendx-sync.zip`](https://github.com/emailsendx/emailsendx-for-wordpress/releases/latest/download/emailsendx-sync.zip).
+1. **Download** the latest [`emailsendx-for-wordpress.zip`](https://storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.zip).
 2. In WordPress: **Plugins → Add New → Upload Plugin**, choose the zip, **Install Now**, then **Activate**.
 3. Go to **EmailSendX → Settings** and paste your **API key** (create one in your [EmailSendX dashboard](https://emailsendx.com) under **Settings → API keys**), or click **Connect with EmailSendX** to authorize in one step.
 4. Open **EmailSendX → Mapping** and choose which WordPress / WooCommerce fields land where.
@@ -68,7 +68,21 @@ Full guide: **[emailsendx.com/docs/integrations/wordpress](https://emailsendx.co
 
 ## Updates
 
-Once installed, updates arrive **natively inside WordPress** — you'll see an "Update available" notice under **Plugins** and can update in one click (or let WordPress auto-update it). Updates are served straight from this repo's [Releases](https://github.com/emailsendx/emailsendx-for-wordpress/releases); there's nothing extra to install or revisit.
+Once installed, updates arrive **natively inside WordPress** — you'll see an "Update available" notice under **Plugins** and can update in one click (or let WordPress auto-update it). There's nothing extra to install or revisit.
+
+Sites poll a small JSON manifest on the EmailSendX release bucket:
+
+```
+https://storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.json
+```
+
+It names the version and the immutable, versioned zip to download. A self-hosted
+setup can point somewhere else with the `emailsendx_sync_update_manifest_url` filter.
+
+> **Upgrading from 1.3.0 or earlier?** Install 1.3.1 by hand once (**Plugins → Add
+> New → Upload**). The 1.3.0 download was packaged without a top-level folder, so
+> WordPress refused it with "No valid plugins were found". Every release from 1.3.1
+> onward updates automatically.
 
 ## Requirements
 
@@ -88,13 +102,26 @@ This plugin sends data to EmailSendX using the API key you configure, and only t
 ## For developers
 
 ```bash
-bash tools/build.sh        # → tools/dist/emailsendx-sync.zip (the installable build)
+bash tools/build.sh            # → tools/dist/  (zip + versioned zip + manifest)
+bash tools/release.sh 1.3.2 "What changed"
 ```
 
-Releases are cut automatically: push a version tag and CI lints, verifies the tag matches the plugin version, builds the zip, and publishes the GitHub Release.
+`build.sh` refuses to produce a package of the wrong shape — it enforces that the
+plugin header, `EMAILSENDX_SYNC_VERSION` and the readme `Stable tag` agree, that
+`EMAILSENDX_SYNC_SLUG` matches the folder being built, and that the archive has
+exactly one top-level `emailsendx-for-wordpress/` folder with forward-slash paths.
+That last gate exists because a hand-rolled zip without it shipped to production
+and could not be installed at all.
+
+`release.sh` bumps the version everywhere, writes the changelog, builds, commits
+and tags — then prints the R2 upload commands. **Uploading to R2 is what ships the
+update**; publish the versioned zip first and the manifest last, since the manifest
+is what tells every site to go fetch it. Pushing and uploading stay your call.
+
+Local development: symlink the repo into a WordPress install rather than copying it.
 
 ```bash
-git tag v1.2.2 && git push origin v1.2.2
+ln -s "$PWD" /path/to/wp-content/plugins/emailsendx-for-wordpress
 ```
 
 ## License

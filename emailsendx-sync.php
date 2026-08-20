@@ -3,7 +3,7 @@
  * Plugin Name:       EmailSendX for WordPress
  * Plugin URI:        https://emailsendx.com/
  * Description:       Sync WordPress users and WooCommerce customers to EmailSendX, and add opt-in forms and newsletter boxes to your pages — with native elements for WPBakery, Elementor, and the Block Editor (Spectra included).
- * Version:           1.3.0
+ * Version:           1.3.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            EmailSendX
@@ -28,11 +28,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /* ─── Plugin constants ─────────────────────────────────────────────── */
 
-define( 'EMAILSENDX_SYNC_VERSION',  '1.3.0' );
+define( 'EMAILSENDX_SYNC_VERSION',  '1.3.1' );
 define( 'EMAILSENDX_SYNC_FILE',     __FILE__ );
 define( 'EMAILSENDX_SYNC_PATH',     plugin_dir_path( __FILE__ ) );
 define( 'EMAILSENDX_SYNC_URL',      plugin_dir_url( __FILE__ ) );
 define( 'EMAILSENDX_SYNC_BASENAME', plugin_basename( __FILE__ ) );
+
+/**
+ * Install folder slug. This MUST match the top-level folder inside the
+ * distributed zip and the folder the plugin is installed into, or a
+ * background update lands beside the old copy instead of replacing it.
+ * Kept as `emailsendx-for-wordpress` to match the public download and
+ * every existing customer install. ShaonPro.
+ */
+define( 'EMAILSENDX_SYNC_SLUG', 'emailsendx-for-wordpress' );
+
+/**
+ * Auto-update manifest. A static JSON file on the EmailSendX R2 bucket,
+ * written by tools/build.sh alongside the zip it describes. R2 is the
+ * single source of truth for releases — no GitHub API, no token, no rate
+ * limit, and it keeps working if the repo ever goes private.
+ */
+define( 'EMAILSENDX_SYNC_UPDATE_MANIFEST', 'https://storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.json' );
 
 /**
  * Default API base. Users on a self-hosted EmailSendX instance can
@@ -94,34 +111,63 @@ spl_autoload_register( function ( $class_name ) {
 	}
 } );
 
-/* ─── Auto-updates via GitHub Releases ─────────────────────────────── */
+/* ─── Auto-updates from the EmailSendX R2 bucket ───────────────────── */
 
 /**
- * Wire WordPress's native update system to this plugin's GitHub Releases,
+ * Wire WordPress's native update system to a static JSON manifest on R2,
  * so "Update available" notices and one-click / background updates behave
  * exactly like a .org-hosted plugin — without being listed on .org.
  *
- * The release asset built by tools/build.sh (emailsendx-sync.zip) is what
- * gets installed, so upgrades land in the correct emailsendx-sync/ folder.
- * Public repo → no token needed. The bundled Plugin Update Checker library
- * (YahnisElsts, MIT) lives under vendor/plugin-update-checker. ShaonPro.
+ * The manifest's `download_url` points at the zip built by tools/build.sh,
+ * whose single top-level folder is EMAILSENDX_SYNC_SLUG — that's what makes
+ * an update REPLACE this install rather than land beside it as a second
+ * copy. The bundled Plugin Update Checker library (YahnisElsts, MIT) lives
+ * under vendor/plugin-update-checker.
+ *
+ * Two hard-won guards here, both of which used to be fatal errors:
+ *
+ *  1. PUC resolves symlinks, so on a symlinked dev install `__FILE__`
+ *     points outside WP_PLUGIN_DIR and PUC throws an uncaught
+ *     RuntimeException ("cannot determine if … is a plugin or a theme")
+ *     — a white screen on activation. Rebuilding the path from
+ *     WP_PLUGIN_DIR + the registered basename keeps it inside the plugins
+ *     directory in both symlinked and normal installs.
+ *
+ *  2. Anything thrown or fatal in here would take the whole site down for
+ *     an update check nobody asked for, so the block is wrapped and
+ *     degrades to "no auto-updates" instead of "no site". ShaonPro.
  */
-if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) ) {
+if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 	$emailsendx_sync_puc = EMAILSENDX_SYNC_PATH . 'vendor/plugin-update-checker/plugin-update-checker.php';
 
 	if ( is_readable( $emailsendx_sync_puc ) ) {
 		require_once $emailsendx_sync_puc;
 
-		$emailsendx_sync_updates = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-			'https://github.com/emailsendx/emailsendx-for-wordpress/',
-			EMAILSENDX_SYNC_FILE,
-			'emailsendx-sync'
-		);
+		try {
+			// Guard 1 — symlink-safe path. wp_register_plugin_realpath() has
+			// already run for this file (wp-settings.php on a normal request,
+			// plugin_sandbox_scrape() during activation), so plugin_basename()
+			// maps the real path back to the folder WordPress knows about.
+			$emailsendx_sync_main = defined( 'WP_PLUGIN_DIR' )
+				? WP_PLUGIN_DIR . '/' . EMAILSENDX_SYNC_BASENAME
+				: EMAILSENDX_SYNC_FILE;
 
-		// Install the release ASSET (emailsendx-sync.zip), not GitHub's
-		// auto-generated source zipball — the asset carries the correct
-		// top-level emailsendx-sync/ folder and omits dev files.
-		$emailsendx_sync_updates->getVcsApi()->enableReleaseAssets( '/emailsendx-sync\.zip$/' );
+			if ( ! file_exists( $emailsendx_sync_main ) ) {
+				$emailsendx_sync_main = EMAILSENDX_SYNC_FILE; // Paranoia.
+			}
+
+			\YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+				apply_filters( 'emailsendx_sync_update_manifest_url', EMAILSENDX_SYNC_UPDATE_MANIFEST ),
+				$emailsendx_sync_main,
+				EMAILSENDX_SYNC_SLUG
+			);
+		} catch ( \Throwable $emailsendx_sync_puc_error ) {
+			// Guard 2 — never let the updater kill the site.
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				//phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log( 'EmailSendX: update checker disabled — ' . $emailsendx_sync_puc_error->getMessage() );
+			}
+		}
 	}
 }
 

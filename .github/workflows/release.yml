@@ -3,9 +3,11 @@ name: Release
 # Cut a release by pushing a version tag, e.g.:
 #   git tag v1.2.2 && git push origin v1.2.2
 # This lints, verifies the tag matches the plugin version, builds the
-# installable zip, and publishes it as a GitHub Release asset named
-# emailsendx-sync.zip — which is exactly what the in-plugin updater and
-# the always-latest download URL resolve to.
+# installable package, and attaches it to a GitHub Release as an archive.
+#
+# NOTE: the GitHub Release is NOT the update channel any more — installed
+# sites poll the manifest on R2. Uploading the three built files to R2 is
+# what actually ships an update; see tools/release.sh for those commands.
 
 on:
   push:
@@ -45,9 +47,17 @@ jobs:
       - name: Build installable zip
         run: bash tools/build.sh   # also enforces header == constant == readme Stable tag
 
-      - name: Publish GitHub Release
+      - name: Publish GitHub Release (archive copy — not the update channel)
         uses: softprops/action-gh-release@v2
         with:
-          files: tools/dist/emailsendx-sync.zip
+          files: |
+            tools/dist/emailsendx-for-wordpress.zip
+            tools/dist/emailsendx-for-wordpress-*.zip
+            tools/dist/emailsendx-for-wordpress.json
           fail_on_unmatched_files: true
           generate_release_notes: true
+
+      - name: Reminder — R2 is what ships the update
+        run: |
+          echo "::notice::GitHub Release published. Sites update from R2, not from here."
+          echo "::notice::Upload tools/dist/*.zip and *.json to the R2 wp-plugin/ prefix — versioned zip first, manifest last. See tools/release.sh."

@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, signup form, elementor, gutenberg
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -59,7 +59,7 @@ This plugin sends data to EmailSendX (the SaaS service) using the API key you co
 
 == Installation ==
 
-1. Upload the `emailsendx-sync` folder to `/wp-content/plugins/`, or install through the WordPress Plugins screen directly.
+1. Install through **Plugins → Add New → Upload Plugin** using `emailsendx-for-wordpress.zip`, or upload the `emailsendx-for-wordpress` folder to `/wp-content/plugins/`.
 2. Activate the plugin through the **Plugins** screen in WordPress.
 3. Go to **EmailSendX → Settings** in the admin menu and paste your API key. You can find or create a key in your EmailSendX dashboard under **Settings → API keys**. See the [setup guide](https://emailsendx.com/docs/wordpress) for details.
 4. Visit **EmailSendX → Mapping** to choose which WordPress / WooCommerce fields land where in EmailSendX.
@@ -115,6 +115,19 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.3.1 =
+Packaging and auto-update fix. Install this one manually — the 1.3.0 download could not be installed through WordPress at all.
+
+**Fixed**
+
+* The download was packaged without a top-level folder, so WordPress rejected it with "No valid plugins were found" on Plugins → Add New → Upload. The build now refuses to produce an archive of the wrong shape.
+* Fatal error on activation when the plugin folder is a symlink (a common local-development setup). The update checker resolved the symlink, decided the file was outside the plugins directory, and threw an uncaught exception. It now works from the folder WordPress registered.
+* The update check can no longer take a site down. Any failure inside it now disables auto-updates for that request instead of raising a fatal error.
+
+**Changed**
+
+* Auto-updates now come from the EmailSendX release bucket instead of GitHub Releases — no API rate limits, and no dependency on the repository staying public.
+
 = 1.3.0 =
 The plugin now grows your list as well as syncing it: opt-in forms and newsletter boxes, with native elements for every major builder.
 
@@ -164,6 +177,9 @@ The plugin now grows your list as well as syncing it: opt-in forms and newslette
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.3.1 =
+Install this update manually (Plugins → Add New → Upload) — the 1.3.0 zip was packaged incorrectly and WordPress could not install it. From 1.3.1 onward updates arrive automatically. Also fixes a fatal error on activation when the plugin folder is a symlink.
 
 = 1.3.0 =
 Adds opt-in forms and newsletter boxes, with native elements for WPBakery, Elementor, the Block Editor and Spectra. Also fixes form fields turning dark on some visitors' machines, and style options being overridden by the theme. Self-hosted EmailSendX instances should update to an EmailSendX build that includes /api/v1/forms first.
