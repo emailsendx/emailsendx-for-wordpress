@@ -21,7 +21,7 @@ defined('ABSPATH') || exit;
  */
 final class Client
 {
-    const SDK_VERSION = '1.1.1';
+    const SDK_VERSION = '1.2.0';
 
     /** @var array<string,Client> */
     private static $instances = [];
@@ -271,7 +271,33 @@ final class Client
             'php_version' => PHP_VERSION,
             'push_url' => $this->push->url(),
             'auto_update' => $this->autoUpdateEnabled(),
+            'site' => $this->siteInfo(),
         ];
+    }
+
+    /**
+     * About the site, for the dashboard's site page. Nothing personal: no
+     * users, emails or content.
+     *
+     * @return array<string,string|bool>
+     */
+    public function siteInfo(): array
+    {
+        $theme = function_exists('wp_get_theme') ? wp_get_theme() : null;
+        $server = isset($_SERVER['SERVER_SOFTWARE']) ? sanitize_text_field(wp_unslash((string) $_SERVER['SERVER_SOFTWARE'])) : '';
+        $info = [
+            'name' => wp_specialchars_decode((string) get_bloginfo('name'), ENT_QUOTES),
+            'locale' => (string) get_locale(),
+            'multisite' => is_multisite(),
+            'theme' => $theme ? (string) $theme->get('Name') : '',
+            'theme_version' => $theme ? (string) $theme->get('Version') : '',
+            'woocommerce' => defined('WC_VERSION') ? (string) constant('WC_VERSION') : '',
+            'server' => substr($server, 0, 80),
+            'memory_limit' => defined('WP_MEMORY_LIMIT') ? (string) WP_MEMORY_LIMIT : (string) ini_get('memory_limit'),
+        ];
+        return array_filter($info, static function ($v) {
+            return $v !== '';
+        });
     }
 
     private function cronHook(): string

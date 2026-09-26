@@ -59,7 +59,7 @@ This plugin sends data to EmailSendX (the SaaS service) using the API key you co
 
 = Updates =
 
-Plugin updates come from TheDevGarden's update server (https://push.thedevgarden.dev). The plugin registers the site there on the first wp-admin visit and checks for updates daily and hourly, sending only the site's address, the plugin, WordPress and PHP versions, and whether auto-updates are on — never contacts, users or settings. Update packages are verified against a signed manifest before WordPress installs them. When a new version is released, the server may notify the site through its REST API so the update appears (or, if auto-updates are on for this plugin, installs) straight away. The Updates card on the plugin's Settings tab shows the status.
+Plugin updates come from TheDevGarden's update server (https://push.thedevgarden.dev). The plugin registers the site there on the first wp-admin visit and checks for updates daily and hourly, sending the site's address and name, its language, active theme, WooCommerce version, web server, PHP memory limit, whether it is a multisite, the plugin, WordPress and PHP versions, and whether auto-updates are on — never users, emails, contacts or content. Update packages are verified against a signed manifest before WordPress installs them. When a new version is released, the server may notify the site through its REST API so the update appears (or, if auto-updates are on for this plugin, installs) straight away. The Updates card on the plugin's Settings tab shows the status.
 
 == Installation ==
 
