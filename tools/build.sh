@@ -9,43 +9,26 @@
 #     emailsendx-for-wordpress-<version>.zip            upload to push.thedevgarden.dev
 #     emailsendx-for-wordpress-<version>-changelog.md   paste into the Changelog box
 #
-# Updates ship from DevGarden Push (push.thedevgarden.dev → Releases).
-# The R2 files below are the bridge for sites still on 1.3.x, which only
-# poll the old R2 manifest, and the stable link behind the website button:
-#
-#     emailsendx-for-wordpress.zip             stable link for the website button
-#     emailsendx-for-wordpress.json            the manifest 1.3.x sites poll
-#
-# The manifest deliberately points at the VERSIONED zip. R2 sits behind
-# Cloudflare, and a fixed filename means a cached edge copy can hand a site
-# the previous release's bytes while the manifest promises the new version —
-# WordPress then "updates" to the same version forever. A versioned URL is
-# immutable, so it can be cached hard and is always the right bytes.
+# Updates ship only from DevGarden Push (push.thedevgarden.dev → Releases).
 #
 # The zip contains a single top-level `emailsendx-for-wordpress/` folder.
 # That folder name is load-bearing: WordPress installs a plugin into the
 # folder the zip carries, so a mismatch turns every auto-update into a
 # SECOND copy of the plugin sitting beside the old one. The build refuses
-# to finish if the shape is wrong — the hand-rolled zip that shipped to R2
+# to finish if the shape is wrong — a hand-rolled zip that shipped
 # before had no top-level folder at all and could not be installed via
 # Plugins → Add New → Upload. ShaonPro.
 set -euo pipefail
 
-SLUG="emailsendx-for-wordpress"          # install folder + zip/manifest basename
+SLUG="emailsendx-for-wordpress"          # install folder + zip basename
 MAINFILE="emailsendx-sync.php"           # main PHP file (NOT renamed — renaming it
                                          # would deactivate every existing install)
-
-# Where the two files will live once uploaded. Override for a staging bucket:
-#   ESX_R2_BASE=https://staging.example.com/wp-plugin bash tools/build.sh
-R2_BASE="${ESX_R2_BASE:-https://storage.emailsendx.com/wp-plugin}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 DIST="$ROOT/tools/dist"
 STAGE="$ROOT/tools/.build"
 MAIN="$ROOT/$MAINFILE"
-
-command -v python3 >/dev/null 2>&1 || { echo "✗ python3 is required (manifest generation)." >&2; exit 1; }
 
 # ── Version gate: header, runtime constant, and readme must agree ───────
 ver_from() { grep -E "$2" "$1" | grep -oE '[0-9]+(\.[0-9]+){1,}' | head -1; }
@@ -84,7 +67,8 @@ fi
 # ── Stage a clean copy under the slug folder, excluding dev/VCS junk ────
 rm -rf "$STAGE"
 mkdir -p "$STAGE/$SLUG" "$DIST"
-rm -f "$DIST/$SLUG.zip" "$DIST/$SLUG.json"
+ZIP="$DIST/$SLUG-$HEADER_VER.zip"
+rm -f "$DIST"/*.zip "$DIST"/*.json "$DIST"/*.md
 
 rsync -a \
   --exclude '.git' \
@@ -98,7 +82,7 @@ rsync -a \
   "$ROOT/" "$STAGE/$SLUG/"
 
 # ── Zip (Info-ZIP on macOS/Linux → forward slashes, single top folder) ──
-( cd "$STAGE" && zip -rqX "$DIST/$SLUG.zip" "$SLUG" -x '*.DS_Store' )
+( cd "$STAGE" && zip -rqX "$ZIP" "$SLUG" -x '*.DS_Store' )
 rm -rf "$STAGE"
 
 # ── Shape gate: exactly one top-level entry, and it's the slug folder ───
@@ -106,7 +90,7 @@ rm -rf "$STAGE"
 # grep exits on the first match, unzip takes SIGPIPE, and `pipefail` turns
 # that into a spurious build failure — intermittently, depending on whether
 # unzip finished writing first. ShaonPro.
-LISTING="$(unzip -Z1 "$DIST/$SLUG.zip")"
+LISTING="$(unzip -Z1 "$ZIP")"
 
 TOPLEVEL="$(printf '%s\n' "$LISTING" | cut -d/ -f1 | sort -u)"
 if [ "$TOPLEVEL" != "$SLUG" ]; then
@@ -124,98 +108,6 @@ printf '%s\n' "$LISTING" | grep -Fxq "$SLUG/includes/push-sdk/load.php" || {
   echo "✗ includes/push-sdk missing — the shipped build would have no auto-updates." >&2; exit 1; }
 echo "✓ Archive shape valid (single top-level $SLUG/, forward slashes, updater bundled)"
 
-# ── Immutable, versioned copy — this is what the manifest links to ─────
-rm -f "$DIST/$SLUG"-*.zip "$DIST/$SLUG"-*.md
-cp "$DIST/$SLUG.zip" "$DIST/$SLUG-$HEADER_VER.zip"
-echo "✓ Versioned copy $SLUG-$HEADER_VER.zip"
-
-# ── Update manifest (Plugin Update Checker JSON schema) ─────────────────
-ESX_SLUG="$SLUG" ESX_VER="$HEADER_VER" ESX_R2="$R2_BASE" ESX_ROOT="$ROOT" \
-ESX_ZIP="$DIST/$SLUG.zip" ESX_OUT="$DIST/$SLUG.json" python3 - <<'PY'
-import os, re, json, hashlib, datetime
-
-root   = os.environ['ESX_ROOT']
-slug   = os.environ['ESX_SLUG']
-ver    = os.environ['ESX_VER']
-base   = os.environ['ESX_R2'].rstrip('/')
-zippath= os.environ['ESX_ZIP']
-out    = os.environ['ESX_OUT']
-
-readme = open(os.path.join(root, 'readme.txt'), encoding='utf-8').read()
-
-def header(field, default=''):
-    m = re.search(r'^%s:\s*(.+)$' % re.escape(field), readme, re.M)
-    return m.group(1).strip() if m else default
-
-def section(title):
-    m = re.search(r'^==\s*%s\s*==\s*\n(.*?)(?=\n==\s|\Z)' % re.escape(title), readme, re.M | re.S)
-    return m.group(1).strip() if m else ''
-
-def to_html(text):
-    """readme.txt subset → the HTML the WP plugin-details modal renders."""
-    html, in_list = [], False
-    for line in text.split('\n'):
-        s = line.strip()
-        if not s:
-            continue
-        m = re.match(r'^=\s*(.+?)\s*=$', s)
-        if m:
-            if in_list: html.append('</ul>'); in_list = False
-            html.append('<h4>%s</h4>' % m.group(1)); continue
-        m = re.match(r'^\*\s+(.*)$', s)
-        if m:
-            if not in_list: html.append('<ul>'); in_list = True
-            html.append('<li>%s</li>' % inline(m.group(1))); continue
-        if in_list: html.append('</ul>'); in_list = False
-        html.append('<p>%s</p>' % inline(s))
-    if in_list: html.append('</ul>')
-    return ''.join(html)
-
-def inline(s):
-    s = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', s)
-    s = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
-    s = re.sub(r'`([^`]+)`', r'<code>\1</code>', s)
-    return s
-
-# Upgrade notice for THIS version only.
-notice = ''
-un = section('Upgrade Notice')
-m = re.search(r'^=\s*%s\s*=\s*\n(.*?)(?=\n=\s|\Z)' % re.escape(ver), un, re.M | re.S)
-if m:
-    notice = ' '.join(m.group(1).split())
-
-sha = hashlib.sha256(open(zippath, 'rb').read()).hexdigest()
-
-manifest = {
-    'name':            'EmailSendX for WordPress',
-    'slug':            slug,
-    'version':         ver,
-    'download_url':    '%s/%s-%s.zip' % (base, slug, ver),
-    'homepage':        'https://emailsendx.com/',
-    'author':          'EmailSendX',
-    'author_homepage': 'https://emailsendx.com',
-    'requires':        header('Requires at least', '6.0'),
-    'tested':          header('Tested up to', '7.0'),
-    'requires_php':    header('Requires PHP', '7.4'),
-    'last_updated':    datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-    'upgrade_notice':  notice,
-    'sections': {
-        'description': to_html(section('Description')),
-        'installation': to_html(section('Installation')),
-        'changelog':   to_html(section('Changelog')),
-    },
-    'icons': {
-        '1x':  '%s/assets/icon-256.png' % base,
-        'svg': '%s/assets/icon.svg' % base,
-    },
-    # Not consumed by WordPress — a build fingerprint so you can confirm the
-    # zip sitting in R2 is the one this manifest describes. ShaonPro.
-    'esx_zip_sha256': sha,
-}
-open(out, 'w', encoding='utf-8').write(json.dumps(manifest, indent=2, ensure_ascii=False) + '\n')
-print('  zip sha256: %s' % sha)
-PY
-
 # ── Changelog for the push panel: this version's readme entry ──────────
 CHANGELOG="$DIST/$SLUG-$HEADER_VER-changelog.md"
 awk -v v="$HEADER_VER" '
@@ -229,15 +121,12 @@ if [ ! -s "$CHANGELOG" ]; then
 fi
 
 echo "── archive contents ──────────────────────────────────────────────"
-unzip -l "$DIST/$SLUG.zip" | tail -3
+unzip -l "$ZIP" | tail -3
 echo "── changelog (paste into the panel) ──────────────────────────────"
 cat "$CHANGELOG"
 echo "──────────────────────────────────────────────────────────────────"
-echo "✓ Upload:    $DIST/$SLUG-$HEADER_VER.zip"
+echo "✓ Upload:    $ZIP"
 echo "✓ Changelog: $CHANGELOG"
 echo
 echo "  push.thedevgarden.dev → Releases → EmailSendX for WordPress:"
 echo "  upload the zip, paste the changelog, Publish."
-echo
-echo "  R2 (1.3.x sites + website button): upload $SLUG-$HEADER_VER.zip,"
-echo "  $SLUG.zip, then $SLUG.json last — see tools/release.sh."

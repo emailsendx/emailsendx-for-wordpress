@@ -58,7 +58,7 @@ It works the same for content sites, membership sites, and WooCommerce stores. W
 
 ## Install
 
-1. **Download** the latest [`emailsendx-for-wordpress.zip`](https://storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.zip).
+1. **Download** the latest [`emailsendx-for-wordpress.zip`](https://push.thedevgarden.dev/api/v1/free/download?product=emailsendx-for-wordpress).
 2. In WordPress: **Plugins → Add New → Upload Plugin**, choose the zip, **Install Now**, then **Activate**.
 3. Go to **EmailSendX → Settings** and paste your **API key** (create one in your [EmailSendX dashboard](https://emailsendx.com) under **Settings → API keys**), or click **Connect with EmailSendX** to authorize in one step.
 4. Open **EmailSendX → Mapping** and choose which WordPress / WooCommerce fields land where.
@@ -82,9 +82,9 @@ Update now, and the auto-update switch.
 For local testing, point it elsewhere from `wp-config.php` with
 `EMAILSENDX_FOR_WORDPRESS_PUSH_API` and `EMAILSENDX_FOR_WORDPRESS_PUSH_KEY`.
 
-> **Sites on 1.3.x** poll the old R2 manifest
-> (`storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.json`). Publishing
-> 1.4.0 there moves them onto the update server; keep that manifest in place.
+> **Sites on 1.3.x or earlier** used the old R2 updater, which is gone. Install
+> 1.4.0 by hand once (**Plugins → Add New → Upload**); every later version arrives
+> from the update server on its own.
 
 > **Upgrading from 1.3.0 or earlier?** Install 1.3.1 by hand once (**Plugins → Add
 > New → Upload**). The 1.3.0 download was packaged without a top-level folder, so
@@ -109,7 +109,7 @@ This plugin sends data to EmailSendX using the API key you configure, and only t
 ## For developers
 
 ```bash
-bash tools/build.sh            # → tools/dist/  (versioned zip + changelog .md, plus the R2 files)
+bash tools/build.sh            # → tools/dist/  (versioned zip + changelog .md)
 bash tools/release.sh 1.4.1 "Fix: what changed" "New: something else"
 ```
 
@@ -123,8 +123,7 @@ and could not be installed at all.
 `release.sh` bumps the version everywhere, writes the changelog, builds, commits
 and tags, and shows the zip and changelog in Finder. **Ship it** in
 push.thedevgarden.dev → Releases: upload the zip, paste the changelog, Publish.
-It also prints the R2 upload commands, which only matter while sites on 1.3.x
-remain and for the website's download button. Pushing and uploading stay your call.
+Pushing and uploading stay your call.
 
 Local development: symlink the repo into a WordPress install rather than copying it.
 

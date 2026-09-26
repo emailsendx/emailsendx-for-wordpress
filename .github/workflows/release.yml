@@ -5,9 +5,8 @@ name: Release
 # This lints, verifies the tag matches the plugin version, builds the
 # installable package, and attaches it to a GitHub Release as an archive.
 #
-# NOTE: the GitHub Release is NOT the update channel any more — installed
-# sites poll the manifest on R2. Uploading the three built files to R2 is
-# what actually ships an update; see tools/release.sh for those commands.
+# NOTE: the GitHub Release is only an archive — installed sites update from
+# push.thedevgarden.dev. Uploading the zip there is what ships an update.
 
 on:
   push:
@@ -51,13 +50,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            tools/dist/emailsendx-for-wordpress.zip
             tools/dist/emailsendx-for-wordpress-*.zip
-            tools/dist/emailsendx-for-wordpress.json
+            tools/dist/emailsendx-for-wordpress-*-changelog.md
           fail_on_unmatched_files: true
           generate_release_notes: true
 
-      - name: Reminder — R2 is what ships the update
+      - name: Reminder — the panel is what ships the update
         run: |
-          echo "::notice::GitHub Release published. Sites update from R2, not from here."
-          echo "::notice::Upload tools/dist/*.zip and *.json to the R2 wp-plugin/ prefix — versioned zip first, manifest last. See tools/release.sh."
+          echo "::notice::GitHub Release published as an archive. Sites update from push.thedevgarden.dev, not from here."
+          echo "::notice::Upload the versioned zip in push.thedevgarden.dev → Releases and paste the changelog .md."

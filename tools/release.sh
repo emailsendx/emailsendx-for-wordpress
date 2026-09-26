@@ -26,9 +26,6 @@ fi
 SUMMARY="$1"
 
 SLUG="emailsendx-for-wordpress"
-R2_BASE="${ESX_R2_BASE:-https://storage.emailsendx.com/wp-plugin}"
-R2_BUCKET="${ESX_R2_BUCKET:-emailsendx-storage}"
-R2_PREFIX="${ESX_R2_PREFIX:-wp-plugin}"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MAIN="$ROOT/emailsendx-sync.php"
@@ -94,19 +91,8 @@ cat <<EOF
 
 $(cat "$CHANGELOG")
 
-  1. push.thedevgarden.dev → Releases → EmailSendX for WordPress:
-     upload the zip, paste the changelog, Publish.
-
-  2. R2 — only while sites on 1.3.x remain (they poll the old manifest),
-     and for the website's download button. Versioned zip FIRST, manifest LAST:
-
-       cd $DIST
-       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG-$VERSION.zip --file $SLUG-$VERSION.zip \\
-         --content-type application/zip --cache-control "public, max-age=31536000, immutable"
-       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG.zip --file $SLUG.zip \\
-         --content-type application/zip --cache-control "public, max-age=300"
-       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG.json --file $SLUG.json \\
-         --content-type application/json --cache-control "public, max-age=300"
+  push.thedevgarden.dev → Releases → EmailSendX for WordPress:
+  upload the zip, paste the changelog, Publish.
 
   Committed and tagged locally; push from GitHub Desktop when you're happy.
 EOF
