@@ -2,27 +2,28 @@
 #
 # One-command release for "EmailSendX for WordPress".
 #
-#   bash tools/release.sh <x.y.z> ["changelog summary"]
-#   e.g.  bash tools/release.sh 1.3.2 "Fix WooCommerce phone mapping"
+#   bash tools/release.sh <x.y.z> "change" ["change" …]
+#   e.g.  bash tools/release.sh 1.4.1 "Fix: WooCommerce phone mapping" "New: …"
 #
 # It bumps the version in all three places (plugin header, the
 # EMAILSENDX_SYNC_VERSION constant, and the readme Stable tag), adds a
-# changelog + upgrade-notice entry, builds and shape-checks the package,
-# then commits and tags vX.Y.Z.
+# changelog entry (one bullet per change) and an upgrade notice (the first
+# change), runs the build (shape-checked), commits and tags vX.Y.Z, and
+# shows the zip + changelog in Finder. If anything fails the bump is undone.
 #
-# Nothing is pushed or uploaded for you. The script ends by printing the
-# exact git push and R2 upload commands — running them is what actually
-# ships the update to every installed site. ShaonPro.
+# Nothing is pushed or uploaded for you: upload the zip to
+# push.thedevgarden.dev → Releases and paste the changelog. ShaonPro.
 set -euo pipefail
 
 VERSION="${1:-}"
-SUMMARY="${2:-Maintenance release.}"
+shift || true
 
-if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-  echo "Usage: bash tools/release.sh <x.y.z> [\"changelog summary\"]" >&2
-  echo "  e.g. bash tools/release.sh 1.3.2 \"Fix WooCommerce phone mapping\"" >&2
+if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || [ "$#" -eq 0 ]; then
+  echo "Usage: bash tools/release.sh <x.y.z> \"change\" [\"change\" …]" >&2
+  echo "  e.g. bash tools/release.sh 1.4.1 \"Fix: WooCommerce phone mapping\"" >&2
   exit 1
 fi
+SUMMARY="$1"
 
 SLUG="emailsendx-for-wordpress"
 R2_BASE="${ESX_R2_BASE:-https://storage.emailsendx.com/wp-plugin}"
@@ -62,58 +63,52 @@ perl -pi -e "s/(EMAILSENDX_SYNC_VERSION[^0-9]+)[0-9]+\.[0-9]+\.[0-9]+/\${1}$VERS
 perl -pi -e "s/^(Stable tag:\s*)[0-9]+\.[0-9]+\.[0-9]+/\${1}$VERSION/" "$README"
 
 echo "→ Adding changelog + upgrade-notice entries"
-ESX_VER="$VERSION" ESX_SUM="$SUMMARY" perl -0777 -pi -e '
-  s/(== Changelog ==\n\n)/$1= $ENV{ESX_VER} =\n$ENV{ESX_SUM}\n\n/;
+BULLETS=""
+for change in "$@"; do BULLETS="$BULLETS* $change"$'\n'; done
+ESX_VER="$VERSION" ESX_BULLETS="$BULLETS" ESX_SUM="$SUMMARY" perl -0777 -pi -e '
+  s/(== Changelog ==\n\n)/$1= $ENV{ESX_VER} =\n$ENV{ESX_BULLETS}\n/;
   s/(== Upgrade Notice ==\n\n)/$1= $ENV{ESX_VER} =\n$ENV{ESX_SUM}\n\n/;
 ' "$README"
+
+rollback() {
+  echo "✗ Release aborted — version bump reverted." >&2
+  git checkout -- emailsendx-sync.php readme.txt
+}
+trap rollback ERR
 
 echo "→ Building (enforces version agreement, slug match, and archive shape)"
 bash "$ROOT/tools/build.sh" >/dev/null
 
 echo "→ Committing + tagging $TAG"
 git add emailsendx-sync.php readme.txt
-git commit -m "Release $TAG — $SUMMARY"
+git commit -q -m "Release $TAG — $SUMMARY"
 git tag -a "$TAG" -m "$TAG"
+trap - ERR
 
+CHANGELOG="$DIST/$SLUG-$VERSION-changelog.md"
 cat <<EOF
 
-✓ $TAG committed, tagged, package built and shape-checked.
+✓ $TAG ready
+  Zip:        $DIST/$SLUG-$VERSION.zip
+  Changelog:  $CHANGELOG
 
-  Nothing has shipped yet. Two steps, in this order:
+$(cat "$CHANGELOG")
 
-  1. Upload to R2 — versioned zip FIRST, manifest LAST. The manifest is the
-     trigger: the moment it says $VERSION, every installed site starts
-     downloading the URL it names, so that file must already be there.
+  1. push.thedevgarden.dev → Releases → EmailSendX for WordPress:
+     upload the zip, paste the changelog, Publish.
+
+  2. R2 — only while sites on 1.3.x remain (they poll the old manifest),
+     and for the website's download button. Versioned zip FIRST, manifest LAST:
 
        cd $DIST
+       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG-$VERSION.zip --file $SLUG-$VERSION.zip \\
+         --content-type application/zip --cache-control "public, max-age=31536000, immutable"
+       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG.zip --file $SLUG.zip \\
+         --content-type application/zip --cache-control "public, max-age=300"
+       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG.json --file $SLUG.json \\
+         --content-type application/json --cache-control "public, max-age=300"
 
-       # a) the immutable package updates actually download
-       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG-$VERSION.zip \\
-         --file $SLUG-$VERSION.zip \\
-         --content-type application/zip \\
-         --cache-control "public, max-age=31536000, immutable"
-
-       # b) the stable link behind the website's download button
-       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG.zip \\
-         --file $SLUG.zip \\
-         --content-type application/zip \\
-         --cache-control "public, max-age=300"
-
-       # c) the manifest — this is what ships the update
-       wrangler r2 object put $R2_BUCKET/$R2_PREFIX/$SLUG.json \\
-         --file $SLUG.json \\
-         --content-type application/json \\
-         --cache-control "public, max-age=300"
-
-     Then confirm what the world sees:
-
-       curl -s $R2_BASE/$SLUG.json | grep -E '"version"|"download_url"'
-       curl -sI $R2_BASE/$SLUG-$VERSION.zip | head -3
-
-  2. Push the source (optional for shipping, but keep the tag in sync):
-
-       git push origin main --follow-tags
-
-  Sites pick the update up within ~12h, or immediately via
-  Dashboard → Updates → "Check again".
+  Committed and tagged locally; push from GitHub Desktop when you're happy.
 EOF
+
+if command -v open >/dev/null 2>&1; then open -R "$DIST/$SLUG-$VERSION.zip"; fi

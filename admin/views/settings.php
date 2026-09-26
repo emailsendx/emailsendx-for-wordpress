@@ -346,3 +346,70 @@ if ( ! empty( $settings['api_base'] ) ) {
 		</div>
 	</div>
 </form>
+
+<?php
+/* ─── Updates ───────────────────────────────────────────────────────── */
+if ( current_user_can( 'update_plugins' ) ) :
+	$esx_u = EmailSendX_Updates::summary();
+	if ( $esx_u['available'] ) {
+		$esx_u_pill = array( 'warn', __( 'Update available', 'emailsendx-sync' ) );
+	} elseif ( ! $esx_u['registered'] ) {
+		$esx_u_pill = $esx_u['error'] ? array( 'error', __( 'Can\'t reach update server', 'emailsendx-sync' ) ) : array( 'info', __( 'Setting up', 'emailsendx-sync' ) );
+	} elseif ( null === $esx_u['latest'] ) {
+		$esx_u_pill = array( 'info', __( 'Not checked yet', 'emailsendx-sync' ) );
+	} else {
+		$esx_u_pill = array( 'ok', __( 'Up to date', 'emailsendx-sync' ) );
+	}
+	$esx_u_checked = $esx_u['checked_at']
+		/* translators: %s: time since, e.g. "5 mins" */
+		? sprintf( __( '%s ago', 'emailsendx-sync' ), human_time_diff( $esx_u['checked_at'] ) )
+		: __( 'Never', 'emailsendx-sync' );
+	?>
+	<div class="esx-card esx-card-compact esx-updates">
+		<div class="esx-card-head esx-updates-head">
+			<div>
+				<h2 class="esx-card-title"><?php echo esc_html__( 'Updates', 'emailsendx-sync' ); ?></h2>
+				<p class="esx-card-sub"><?php echo esc_html__( 'Signed and verified before they install. New versions reach this site as soon as they\'re released.', 'emailsendx-sync' ); ?></p>
+			</div>
+			<span class="esx-pill esx-pill-<?php echo esc_attr( $esx_u_pill[0] ); ?>"><?php echo esc_html( $esx_u_pill[1] ); ?></span>
+		</div>
+
+		<div class="esx-stat-grid esx-updates-grid">
+			<div class="esx-stat">
+				<span class="esx-stat-number esx-updates-value">v<?php echo esc_html( $esx_u['installed'] ); ?></span>
+				<span class="esx-stat-label"><?php echo esc_html__( 'Installed', 'emailsendx-sync' ); ?></span>
+			</div>
+			<div class="esx-stat">
+				<span class="esx-stat-number esx-updates-value<?php echo $esx_u['available'] ? ' is-new' : ''; ?>"><?php echo $esx_u['latest'] ? 'v' . esc_html( $esx_u['latest'] ) : '—'; ?></span>
+				<span class="esx-stat-label"><?php echo esc_html__( 'Latest', 'emailsendx-sync' ); ?></span>
+			</div>
+			<div class="esx-stat">
+				<span class="esx-stat-number esx-updates-value esx-updates-text"><?php echo esc_html( $esx_u_checked ); ?></span>
+				<span class="esx-stat-label"><?php echo esc_html__( 'Last checked', 'emailsendx-sync' ); ?></span>
+			</div>
+			<div class="esx-stat">
+				<span class="esx-stat-number esx-updates-value esx-updates-text"><?php echo $esx_u['auto'] ? esc_html__( 'On', 'emailsendx-sync' ) : esc_html__( 'Off', 'emailsendx-sync' ); ?></span>
+				<span class="esx-stat-label"><?php echo esc_html__( 'Automatic updates', 'emailsendx-sync' ); ?></span>
+			</div>
+		</div>
+
+		<?php if ( $esx_u['error'] && ! $esx_u['registered'] ) : ?>
+			<p class="esx-help esx-updates-error"><?php echo esc_html( $esx_u['error'] ); ?></p>
+		<?php endif; ?>
+
+		<div class="esx-updates-actions">
+			<?php if ( $esx_u['available'] && $esx_u['update_url'] ) : ?>
+				<a class="esx-btn esx-btn-primary" href="<?php echo esc_url( $esx_u['update_url'] ); ?>">
+					<?php
+					/* translators: %s: version number */
+					echo esc_html( sprintf( __( 'Update to v%s', 'emailsendx-sync' ), $esx_u['latest'] ) );
+					?>
+				</a>
+			<?php endif; ?>
+			<a class="esx-btn esx-btn-secondary" href="<?php echo esc_url( EmailSendX_Updates::check_url() ); ?>"><?php echo esc_html__( 'Check for updates', 'emailsendx-sync' ); ?></a>
+			<?php if ( $esx_u['auto_allowed'] ) : ?>
+				<a class="esx-updates-link" href="<?php echo esc_url( EmailSendX_Updates::auto_url( ! $esx_u['auto'] ) ); ?>"><?php echo $esx_u['auto'] ? esc_html__( 'Turn off automatic updates', 'emailsendx-sync' ) : esc_html__( 'Turn on automatic updates', 'emailsendx-sync' ); ?></a>
+			<?php endif; ?>
+		</div>
+	</div>
+<?php endif; ?>

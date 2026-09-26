@@ -70,14 +70,21 @@ Full guide: **[emailsendx.com/docs/integrations/wordpress](https://emailsendx.co
 
 Once installed, updates arrive **natively inside WordPress** — you'll see an "Update available" notice under **Plugins** and can update in one click (or let WordPress auto-update it). There's nothing extra to install or revisit.
 
-Sites poll a small JSON manifest on the EmailSendX release bucket:
+From 1.4.0, updates come from TheDevGarden's update server
+(`https://push.thedevgarden.dev`), where this plugin is a free product. Each site
+registers itself on the first wp-admin visit — no key — and every package is
+checked against an Ed25519-signed manifest and its SHA-384 before WordPress
+installs it. A released version can be pushed to sites at once; if auto-updates
+are on for the plugin, it installs straight away. The **Updates** card on the
+Settings tab shows the installed and latest version and offers Check for updates,
+Update now, and the auto-update switch.
 
-```
-https://storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.json
-```
+For local testing, point it elsewhere from `wp-config.php` with
+`EMAILSENDX_FOR_WORDPRESS_PUSH_API` and `EMAILSENDX_FOR_WORDPRESS_PUSH_KEY`.
 
-It names the version and the immutable, versioned zip to download. A self-hosted
-setup can point somewhere else with the `emailsendx_sync_update_manifest_url` filter.
+> **Sites on 1.3.x** poll the old R2 manifest
+> (`storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.json`). Publishing
+> 1.4.0 there moves them onto the update server; keep that manifest in place.
 
 > **Upgrading from 1.3.0 or earlier?** Install 1.3.1 by hand once (**Plugins → Add
 > New → Upload**). The 1.3.0 download was packaged without a top-level folder, so
@@ -102,8 +109,8 @@ This plugin sends data to EmailSendX using the API key you configure, and only t
 ## For developers
 
 ```bash
-bash tools/build.sh            # → tools/dist/  (zip + versioned zip + manifest)
-bash tools/release.sh 1.3.2 "What changed"
+bash tools/build.sh            # → tools/dist/  (versioned zip + changelog .md, plus the R2 files)
+bash tools/release.sh 1.4.1 "Fix: what changed" "New: something else"
 ```
 
 `build.sh` refuses to produce a package of the wrong shape — it enforces that the
@@ -114,9 +121,10 @@ That last gate exists because a hand-rolled zip without it shipped to production
 and could not be installed at all.
 
 `release.sh` bumps the version everywhere, writes the changelog, builds, commits
-and tags — then prints the R2 upload commands. **Uploading to R2 is what ships the
-update**; publish the versioned zip first and the manifest last, since the manifest
-is what tells every site to go fetch it. Pushing and uploading stay your call.
+and tags, and shows the zip and changelog in Finder. **Ship it** in
+push.thedevgarden.dev → Releases: upload the zip, paste the changelog, Publish.
+It also prints the R2 upload commands, which only matter while sites on 1.3.x
+remain and for the website's download button. Pushing and uploading stay your call.
 
 Local development: symlink the repo into a WordPress install rather than copying it.
 

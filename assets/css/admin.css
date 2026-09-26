@@ -2154,3 +2154,49 @@
 	font-weight: 600;
 }
 .esx-int-table tbody tr:last-child td { border-bottom: 0; }
+
+/* ── Updates card (Settings tab) ─────────────────────────────────────── */
+.esx-updates-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+}
+.esx-updates-grid {
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.esx-stat-number.esx-updates-value {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 18px;
+	letter-spacing: 0;
+}
+.esx-stat-number.esx-updates-text {
+	font-family: inherit;
+	font-size: 16px;
+}
+.esx-stat-number.is-new {
+	color: var(--esx-primary);
+}
+.esx-updates-error {
+	margin: 0 0 12px;
+	color: var(--esx-error);
+}
+.esx-updates-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 16px;
+}
+.esx-updates-link {
+	font-weight: 600;
+	color: var(--esx-primary);
+	text-decoration: none;
+}
+.esx-updates-link:hover {
+	text-decoration: underline;
+}
+@media (max-width: 600px) {
+	.esx-updates-head {
+		flex-direction: column;
+	}
+}

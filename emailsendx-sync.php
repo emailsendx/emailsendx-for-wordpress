@@ -44,12 +44,14 @@ define( 'EMAILSENDX_SYNC_BASENAME', plugin_basename( __FILE__ ) );
 define( 'EMAILSENDX_SYNC_SLUG', 'emailsendx-for-wordpress' );
 
 /**
- * Auto-update manifest. A static JSON file on the EmailSendX R2 bucket,
- * written by tools/build.sh alongside the zip it describes. R2 is the
- * single source of truth for releases — no GitHub API, no token, no rate
- * limit, and it keeps working if the repo ever goes private.
+ * Update server (DevGarden Push). EmailSendX for WordPress is a free
+ * product there: sites register themselves, get signed updates, and new
+ * releases can be pushed to them at once. Overridable from wp-config.php
+ * for local testing with EMAILSENDX_FOR_WORDPRESS_PUSH_API /
+ * EMAILSENDX_FOR_WORDPRESS_PUSH_KEY.
  */
-define( 'EMAILSENDX_SYNC_UPDATE_MANIFEST', 'https://storage.emailsendx.com/wp-plugin/emailsendx-for-wordpress.json' );
+define( 'EMAILSENDX_SYNC_UPDATE_API', 'https://push.thedevgarden.dev' );
+define( 'EMAILSENDX_SYNC_UPDATE_KEY', 'mdLYNslEDcCAE8KFXNTDq/wYkrqdJyo5+t6lPrpgVpA=' );
 
 /**
  * Default API base. Users on a self-hosted EmailSendX instance can
@@ -111,65 +113,52 @@ spl_autoload_register( function ( $class_name ) {
 	}
 } );
 
-/* ─── Auto-updates from the EmailSendX R2 bucket ───────────────────── */
+/* ─── Auto-updates (DevGarden Push) ────────────────────────────────── */
 
 /**
- * Wire WordPress's native update system to a static JSON manifest on R2,
- * so "Update available" notices and one-click / background updates behave
- * exactly like a .org-hosted plugin — without being listed on .org.
+ * WordPress's native update system, fed by push.thedevgarden.dev: "Update
+ * available" notices, one-click and background updates, and "View details"
+ * behave like a .org-hosted plugin. The site registers itself on the first
+ * wp-admin visit (no key), every package is checked against an Ed25519-
+ * signed manifest and its SHA-384 before WordPress installs it, and a
+ * released version can be pushed to sites at once. The SDK lives in
+ * includes/push-sdk under the EmailSendX\Push namespace — regenerate it
+ * with the License-Manager repo's sdk/wordpress/bin/scope.php.
  *
- * The manifest's `download_url` points at the zip built by tools/build.sh,
- * whose single top-level folder is EMAILSENDX_SYNC_SLUG — that's what makes
- * an update REPLACE this install rather than land beside it as a second
- * copy. The bundled Plugin Update Checker library (YahnisElsts, MIT) lives
- * under vendor/plugin-update-checker.
- *
- * Two hard-won guards here, both of which used to be fatal errors:
- *
- *  1. PUC resolves symlinks, so on a symlinked dev install `__FILE__`
- *     points outside WP_PLUGIN_DIR and PUC throws an uncaught
- *     RuntimeException ("cannot determine if … is a plugin or a theme")
- *     — a white screen on activation. Rebuilding the path from
- *     WP_PLUGIN_DIR + the registered basename keeps it inside the plugins
- *     directory in both symlinked and normal installs.
- *
- *  2. Anything thrown or fatal in here would take the whole site down for
- *     an update check nobody asked for, so the block is wrapped and
- *     degrades to "no auto-updates" instead of "no site". ShaonPro.
+ * Replaces the R2 manifest + Plugin Update Checker used up to 1.3.x.
+ * Anything thrown here degrades to "no auto-updates", never "no site".
+ * ShaonPro.
  */
-if ( is_admin() || ( defined( 'DOING_CRON' ) && DOING_CRON ) || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
-	$emailsendx_sync_puc = EMAILSENDX_SYNC_PATH . 'vendor/plugin-update-checker/plugin-update-checker.php';
+require_once EMAILSENDX_SYNC_PATH . 'includes/push-sdk/load.php';
 
-	if ( is_readable( $emailsendx_sync_puc ) ) {
-		require_once $emailsendx_sync_puc;
-
-		try {
-			// Guard 1 — symlink-safe path. wp_register_plugin_realpath() has
-			// already run for this file (wp-settings.php on a normal request,
-			// plugin_sandbox_scrape() during activation), so plugin_basename()
-			// maps the real path back to the folder WordPress knows about.
-			$emailsendx_sync_main = defined( 'WP_PLUGIN_DIR' )
-				? WP_PLUGIN_DIR . '/' . EMAILSENDX_SYNC_BASENAME
-				: EMAILSENDX_SYNC_FILE;
-
-			if ( ! file_exists( $emailsendx_sync_main ) ) {
-				$emailsendx_sync_main = EMAILSENDX_SYNC_FILE; // Paranoia.
-			}
-
-			\YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-				apply_filters( 'emailsendx_sync_update_manifest_url', EMAILSENDX_SYNC_UPDATE_MANIFEST ),
-				$emailsendx_sync_main,
-				EMAILSENDX_SYNC_SLUG
-			);
-		} catch ( \Throwable $emailsendx_sync_puc_error ) {
-			// Guard 2 — never let the updater kill the site.
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				//phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				error_log( 'EmailSendX: update checker disabled — ' . $emailsendx_sync_puc_error->getMessage() );
-			}
+function emailsendx_sync_updates() {
+	try {
+		\EmailSendX\Push\Client::init(
+			array(
+				'file'       => EMAILSENDX_SYNC_FILE,
+				'slug'       => EMAILSENDX_SYNC_SLUG,
+				'name'       => 'EmailSendX for WordPress',
+				'free'       => true,
+				'api'        => EMAILSENDX_SYNC_UPDATE_API,
+				'public_key' => defined( 'EMAILSENDX_FOR_WORDPRESS_PUSH_KEY' ) ? EMAILSENDX_FOR_WORDPRESS_PUSH_KEY : EMAILSENDX_SYNC_UPDATE_KEY,
+			)
+		);
+	} catch ( \Throwable $e ) {
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			//phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			error_log( 'EmailSendX: updates disabled — ' . $e->getMessage() );
 		}
 	}
+
+	// One-time cleanup of the retired Plugin Update Checker (1.3.x): its
+	// twice-daily cron event and cached state would otherwise linger.
+	$puc_cron = 'puc_cron_check_updates-' . EMAILSENDX_SYNC_SLUG;
+	if ( wp_next_scheduled( $puc_cron ) ) {
+		wp_clear_scheduled_hook( $puc_cron );
+		delete_site_option( 'external_updates-' . EMAILSENDX_SYNC_SLUG );
+	}
 }
+add_action( 'plugins_loaded', 'emailsendx_sync_updates' );
 
 /* ─── Activation / deactivation ────────────────────────────────────── */
 
@@ -199,6 +188,7 @@ function emailsendx_sync_bootstrap() {
 	new EmailSendX_Mapper_Hooks();
 	new EmailSendX_Log();
 	new EmailSendX_Notices();
+	new EmailSendX_Updates();
 
 	// Front-end opt-in forms (shortcodes + subscribe proxy). Registered
 	// on every request — shortcodes render on the front end and the REST

@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 #
-# Build the WordPress-installable zip + auto-update manifest for
-# "EmailSendX for WordPress".
+# Build the WordPress-installable zip for "EmailSendX for WordPress".
 #
 #     bash tools/build.sh
 #
-# Produces three files in tools/dist/ — upload ALL THREE to R2, same folder:
+# Produces in tools/dist/:
 #
-#     emailsendx-for-wordpress-<version>.zip   what the manifest points at
+#     emailsendx-for-wordpress-<version>.zip            upload to push.thedevgarden.dev
+#     emailsendx-for-wordpress-<version>-changelog.md   paste into the Changelog box
+#
+# Updates ship from DevGarden Push (push.thedevgarden.dev → Releases).
+# The R2 files below are the bridge for sites still on 1.3.x, which only
+# poll the old R2 manifest, and the stable link behind the website button:
+#
 #     emailsendx-for-wordpress.zip             stable link for the website button
-#     emailsendx-for-wordpress.json            the update manifest sites poll
+#     emailsendx-for-wordpress.json            the manifest 1.3.x sites poll
 #
 # The manifest deliberately points at the VERSIONED zip. R2 sits behind
 # Cloudflare, and a fixed filename means a cached edge copy can hand a site
@@ -115,12 +120,12 @@ case "$LISTING" in
 esac
 printf '%s\n' "$LISTING" | grep -Fxq "$SLUG/$MAINFILE" || {
   echo "✗ $SLUG/$MAINFILE missing from the archive." >&2; exit 1; }
-printf '%s\n' "$LISTING" | grep -Fxq "$SLUG/vendor/plugin-update-checker/plugin-update-checker.php" || {
-  echo "✗ vendor/plugin-update-checker missing — the shipped build would have no auto-updates." >&2; exit 1; }
+printf '%s\n' "$LISTING" | grep -Fxq "$SLUG/includes/push-sdk/load.php" || {
+  echo "✗ includes/push-sdk missing — the shipped build would have no auto-updates." >&2; exit 1; }
 echo "✓ Archive shape valid (single top-level $SLUG/, forward slashes, updater bundled)"
 
 # ── Immutable, versioned copy — this is what the manifest links to ─────
-rm -f "$DIST/$SLUG"-*.zip
+rm -f "$DIST/$SLUG"-*.zip "$DIST/$SLUG"-*.md
 cp "$DIST/$SLUG.zip" "$DIST/$SLUG-$HEADER_VER.zip"
 echo "✓ Versioned copy $SLUG-$HEADER_VER.zip"
 
@@ -211,17 +216,28 @@ open(out, 'w', encoding='utf-8').write(json.dumps(manifest, indent=2, ensure_asc
 print('  zip sha256: %s' % sha)
 PY
 
-echo "✓ Built $DIST/$SLUG.zip"
-echo "✓ Built $DIST/$SLUG-$HEADER_VER.zip"
-echo "✓ Built $DIST/$SLUG.json"
-echo
-echo "── upload ALL THREE to R2 under the same prefix ──────────────────"
-echo "    $SLUG-$HEADER_VER.zip   → cache hard (immutable, what updates download)"
-echo "    $SLUG.zip               → cache briefly (website download button)"
-echo "    $SLUG.json              → cache briefly (the manifest sites poll)"
-echo
-echo "  Publish the versioned zip FIRST, the manifest LAST — the manifest is"
-echo "  what tells every site to go fetch it. See tools/release.sh."
-echo
+# ── Changelog for the push panel: this version's readme entry ──────────
+CHANGELOG="$DIST/$SLUG-$HEADER_VER-changelog.md"
+awk -v v="$HEADER_VER" '
+  /^== / { inlog = ($0 ~ /^== Changelog ==/); next }
+  inlog && /^= / { take = ($0 ~ "^= " v " ="); next }
+  inlog && take { sub(/^\* /, "- "); print }
+' "$ROOT/readme.txt" | perl -0777 -pe 's/\A\s+//; s/\s+\z/\n/' > "$CHANGELOG"
+if [ ! -s "$CHANGELOG" ]; then
+  echo "✗ readme.txt has no changelog entry for $HEADER_VER (= $HEADER_VER = under == Changelog ==)." >&2
+  exit 1
+fi
+
 echo "── archive contents ──────────────────────────────────────────────"
 unzip -l "$DIST/$SLUG.zip" | tail -3
+echo "── changelog (paste into the panel) ──────────────────────────────"
+cat "$CHANGELOG"
+echo "──────────────────────────────────────────────────────────────────"
+echo "✓ Upload:    $DIST/$SLUG-$HEADER_VER.zip"
+echo "✓ Changelog: $CHANGELOG"
+echo
+echo "  push.thedevgarden.dev → Releases → EmailSendX for WordPress:"
+echo "  upload the zip, paste the changelog, Publish."
+echo
+echo "  R2 (1.3.x sites + website button): upload $SLUG-$HEADER_VER.zip,"
+echo "  $SLUG.zip, then $SLUG.json last — see tools/release.sh."

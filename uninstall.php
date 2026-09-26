@@ -79,3 +79,14 @@ while ( false !== $emailsendx_timestamp && null !== $emailsendx_timestamp ) {
 	$emailsendx_timestamp = wp_next_scheduled( $emailsendx_cron_hook );
 }
 wp_clear_scheduled_hook( $emailsendx_cron_hook );
+
+/* ─── 5. Update client (includes/push-sdk) and the retired updater ─── */
+
+delete_option( 'tdgpush_emailsendx_for_wordpress' );
+delete_transient( 'tdgpush_reg_' . md5( 'emailsendx-for-wordpress' ) );
+delete_site_transient( 'tdgpush_upd_' . md5( 'emailsendx-for-wordpress' ) );
+wp_clear_scheduled_hook( 'tdgpush_daily_emailsendx_for_wordpress' );
+// Plugin Update Checker, used up to 1.3.x.
+delete_site_option( 'external_updates-emailsendx-for-wordpress' );
+wp_clear_scheduled_hook( 'puc_cron_check_updates-emailsendx-for-wordpress' );
+
