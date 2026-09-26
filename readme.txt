@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, signup form, elementor, gutenberg
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.3.1
+Stable tag: 1.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,10 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.4.0 =
+* Updates now come from TheDevGarden's update server: signed, verified before install, and delivered as soon as a version is released. No action needed — your settings are untouched.
+* New: Updates card on the Settings tab — installed and latest version, Check for updates, Update now, and the automatic-updates switch.
+
 = 1.3.1 =
 Packaging and auto-update fix. Install this one manually — the 1.3.0 download could not be installed through WordPress at all.
 
@@ -181,6 +185,9 @@ The plugin now grows your list as well as syncing it: opt-in forms and newslette
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.4.0 =
+Updates now come from TheDevGarden's update server: signed, verified before install, and delivered as soon as a version is released. No action needed — your settings are untouched.
 
 = 1.3.1 =
 Install this update manually (Plugins → Add New → Upload) — the 1.3.0 zip was packaged incorrectly and WordPress could not install it. From 1.3.1 onward updates arrive automatically. Also fixes a fatal error on activation when the plugin folder is a symlink.

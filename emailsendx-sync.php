@@ -3,7 +3,7 @@
  * Plugin Name:       EmailSendX for WordPress
  * Plugin URI:        https://emailsendx.com/
  * Description:       Sync WordPress users and WooCommerce customers to EmailSendX, and add opt-in forms and newsletter boxes to your pages — with native elements for WPBakery, Elementor, and the Block Editor (Spectra included).
- * Version:           1.3.1
+ * Version:           1.4.0
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            EmailSendX
@@ -28,7 +28,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 /* ─── Plugin constants ─────────────────────────────────────────────── */
 
-define( 'EMAILSENDX_SYNC_VERSION',  '1.3.1' );
+define( 'EMAILSENDX_SYNC_VERSION',  '1.4.0' );
 define( 'EMAILSENDX_SYNC_FILE',     __FILE__ );
 define( 'EMAILSENDX_SYNC_PATH',     plugin_dir_path( __FILE__ ) );
 define( 'EMAILSENDX_SYNC_URL',      plugin_dir_url( __FILE__ ) );
