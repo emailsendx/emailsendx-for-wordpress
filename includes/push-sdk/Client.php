@@ -21,7 +21,7 @@ defined('ABSPATH') || exit;
  */
 final class Client
 {
-    const SDK_VERSION = '1.2.0';
+    const SDK_VERSION = '1.2.1';
 
     /** @var array<string,Client> */
     private static $instances = [];

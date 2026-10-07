@@ -123,7 +123,7 @@ final class Updater
         if ($action !== 'plugin_information' || !isset($args->slug) || $args->slug !== $this->client->slug()) {
             return $result;
         }
-        $state = $this->state();
+        $state = $this->forDetails();
         $product = is_array($state) ? ($state['product'] ?? []) : [];
         $update = is_array($state) ? ($state['update'] ?? null) : null;
 
@@ -169,6 +169,31 @@ final class Updater
             'icons' => $this->icons($state),
             'download_link' => is_array($update) ? (string) $update['package'] : '',
         ];
+    }
+
+    /**
+     * The server's answer for the "View details" popup: asked for afresh.
+     *
+     * Someone clicked to read the details, so they get what the product page
+     * on the server says now. The cached answer can be up to 12 hours old, and
+     * nothing else tells a site that the description, installation notes, FAQ,
+     * links or banner were edited -- the popup went on showing the old ones.
+     *
+     * A failed request falls back to the last good answer and leaves it
+     * cached. state(true) would store the failure marker instead, and one
+     * click while the server is unreachable must not hide the update offer
+     * for half an hour.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function forDetails(): ?array
+    {
+        $body = $this->client->license()->refresh();
+        if (is_wp_error($body)) {
+            return $this->cached();
+        }
+        set_site_transient($this->cacheKey, $body, self::CACHE_TTL);
+        return $body;
     }
 
     /**
