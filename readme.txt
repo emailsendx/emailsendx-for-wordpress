@@ -65,7 +65,7 @@ Plugin updates come from TheDevGarden's update server (https://push.thedevgarden
 
 1. Install through **Plugins → Add New → Upload Plugin** using `emailsendx-for-wordpress.zip`, or upload the `emailsendx-for-wordpress` folder to `/wp-content/plugins/`.
 2. Activate the plugin through the **Plugins** screen in WordPress.
-3. Go to **EmailSendX → Settings** in the admin menu and paste your API key. You can find or create a key in your EmailSendX dashboard under **Settings → API keys**. See the [setup guide](https://emailsendx.com/docs/wordpress) for details.
+3. Go to **EmailSendX → Settings** in the admin menu and paste your API key. You can find or create a key in your EmailSendX dashboard under **Settings → API keys**. See the [setup guide](https://emailsendx.com/docs/integrations/wordpress) for details.
 4. Visit **EmailSendX → Mapping** to choose which WordPress / WooCommerce fields land where in EmailSendX.
 5. Hit **Run sync now** on the **Sync** tab to push your existing users for the first time.
 
