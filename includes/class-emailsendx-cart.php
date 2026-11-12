@@ -2071,7 +2071,9 @@ class EmailSendX_Cart {
 			}
 			set_transient( $cache_key, $slug, 12 * HOUR_IN_SECONDS );
 		}
-		return '' !== $slug ? $base . '/workspaces/' . rawurlencode( $slug ) . '/automations' : $base;
+		// `?setup=abandoned-cart` makes EmailSendX show its cart recovery
+		// card (one-click reminder emails) even before the first cart arrives.
+		return '' !== $slug ? $base . '/workspaces/' . rawurlencode( $slug ) . '/automations?setup=abandoned-cart' : $base;
 	}
 
 	/**

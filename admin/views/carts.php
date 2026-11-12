@@ -325,7 +325,7 @@ $esx_step_copy = array(
 	),
 	'emails'  => array(
 		__( 'Turn on the reminder emails in EmailSendX', 'emailsendx-sync' ),
-		__( 'In EmailSendX, open Automations, add the “Abandoned Cart” template and switch it on. Its emails already have the link back to the cart and the list of items.', 'emailsendx-sync' ),
+		__( 'Open EmailSendX and, on the Abandoned cart recovery card, click “Set up reminder emails”, then “Turn on”. The emails already have the link back to the cart and the list of items.', 'emailsendx-sync' ),
 	),
 	'test'    => array(
 		__( 'Send yourself a test cart', 'emailsendx-sync' ),
