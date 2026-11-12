@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, signup form, elementor, gutenberg
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.4.3
+Stable tag: 1.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,11 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.5.0 =
+* New: WooCommerce abandoned cart recovery — optional and off until you switch it on under Settings. Shoppers who leave a cart get your EmailSendX reminder emails with a link straight back to their cart, and reminders stop as soon as they order.
+* New: choose who can get reminders — everyone who enters an email (with a No thanks link), only shoppers who tick a consent box, or only logged-in customers.
+* New: Send a test cart button, and saved carts are included in WordPress's personal data export and erasure tools.
+
 = 1.4.3 =
 * Fixed: View details now shows the current description, installation steps, FAQ and links from the update server. It could show what the server said up to 12 hours earlier.
 
@@ -207,6 +212,9 @@ The plugin now grows your list as well as syncing it: opt-in forms and newslette
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.5.0 =
+New: WooCommerce abandoned cart recovery — optional and off until you switch it on under Settings. Shoppers who leave a cart get your EmailSendX reminder emails with a link straight back to their cart, and reminders stop as soon as they order.
 
 = 1.4.3 =
 Fixed: View details now shows the current description, installation steps, FAQ and links from the update server. It could show what the server said up to 12 hours earlier.
