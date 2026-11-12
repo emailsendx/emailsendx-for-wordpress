@@ -333,6 +333,21 @@ class EmailSendX_Admin {
 	}
 
 	/**
+	 * Cache-busting version for a shipped asset: the plugin version plus the
+	 * file's last-modified time. The version alone is not enough — a browser
+	 * or CDN that already holds `admin.css?ver=X` keeps showing the old
+	 * styles when the file changes under the same version, which leaves new
+	 * screens unstyled. ShaonPro.
+	 *
+	 * @param string $relative Path inside the plugin, e.g. 'assets/css/admin.css'.
+	 * @return string
+	 */
+	public static function asset_version( $relative ) {
+		$mtime = @filemtime( EMAILSENDX_SYNC_PATH . $relative ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		return $mtime ? EMAILSENDX_SYNC_VERSION . '.' . $mtime : EMAILSENDX_SYNC_VERSION;
+	}
+
+	/**
 	 * Enqueue the plugin's CSS + JS — but only on its own admin page so
 	 * we don't pollute the global WP admin.
 	 *
@@ -348,14 +363,14 @@ class EmailSendX_Admin {
 			'emailsendx-sync-admin',
 			EMAILSENDX_SYNC_URL . 'assets/css/admin.css',
 			array(),
-			EMAILSENDX_SYNC_VERSION
+			self::asset_version( 'assets/css/admin.css' )
 		);
 
 		wp_enqueue_script(
 			'emailsendx-sync-admin',
 			EMAILSENDX_SYNC_URL . 'assets/js/admin.js',
 			array( 'jquery' ),
-			EMAILSENDX_SYNC_VERSION,
+			self::asset_version( 'assets/js/admin.js' ),
 			true
 		);
 
