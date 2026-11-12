@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, signup form, elementor, gutenberg
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.6.0
+Stable tag: 1.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,9 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.6.1 =
+* Improved: the Open EmailSendX button on the Carts tab goes straight to the new Abandoned cart recovery card, where one click creates the reminder emails and one more turns them on.
+
 = 1.6.0 =
 * New: abandoned carts have their own Carts tab.
 * New: step-by-step setup checklist that ticks itself as you go, with one-click Turn on and Send a test cart.
@@ -219,6 +222,9 @@ The plugin now grows your list as well as syncing it: opt-in forms and newslette
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.6.1 =
+Improved: the Open EmailSendX button on the Carts tab goes straight to the new Abandoned cart recovery card, where one click creates the reminder emails and one more turns them on.
 
 = 1.6.0 =
 New: abandoned carts have their own Carts tab.
