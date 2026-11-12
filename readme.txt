@@ -47,6 +47,7 @@ The same two elements are available everywhere, and they render identically no m
 * Integrations screen showing which builders are detected and live on your site
 * Sync WordPress users to EmailSendX
 * WooCommerce customer sync (auto-detected when WooCommerce is active)
+* WooCommerce abandoned cart recovery — optional, off until you switch it on: shoppers who leave get your EmailSendX reminder sequence with a link straight back to their cart, and reminders stop as soon as they order
 * Custom field mapping with merge-tag support (`{{contact.firstName}}`, `{{contact.custom.<key>}}`)
 * Manual one-click sync, plus automatic sync on user/customer create + update
 * Sync history with per-batch breakdown (created, updated, skipped, failed)
@@ -56,6 +57,10 @@ The same two elements are available everywhere, and they render identically no m
 = Privacy =
 
 This plugin sends data to EmailSendX (the SaaS service) using the API key you configure. You control what gets sent via the Mapping tab. No contact data leaves your site until you connect a key. See [emailsendx.com/privacy](https://emailsendx.com/privacy) for the SaaS data policy.
+
+= Abandoned cart recovery =
+
+Off by default. When you switch it on (Settings → Abandoned cart recovery), the plugin saves a shopper's cart on your own site once it knows their email address — their email, name, and what is in the cart. If the cart is left untouched for the time you choose, the shopper is added to an "Abandoned carts" list in EmailSendX and EmailSendX receives their email address, name and the cart contents so it can send your reminder emails. When they order, EmailSendX is told so the reminders stop. You choose who can get reminders: everyone who enters an email (with a "No thanks" link under the email field), only shoppers who tick a consent box, or only logged-in customers. Nothing is saved for a shopper who declines, saved carts are deleted after 30 days, and saved carts are included in WordPress's personal data export and erasure tools. Suggested privacy policy wording is added under Settings → Privacy.
 
 = Updates =
 
@@ -106,6 +111,14 @@ By default the plugin does **not** delete or unsubscribe contacts in EmailSendX 
 = Can I create EmailSendX custom fields without leaving WordPress? =
 
 Yes. On the Mapping tab, pick **+ Create new custom field…** in any target dropdown. A small dialog will let you set a key, label, and type, and the new field becomes available everywhere on your workspace immediately.
+
+= How does abandoned cart recovery work? =
+
+It needs WooCommerce and is off until you turn it on under **EmailSendX → Settings → Abandoned cart recovery**. Once a shopper has entered their email at checkout (or is logged in) and leaves their cart untouched for the time you set — one hour by default — the plugin sends the cart to EmailSendX, which runs your reminder emails. In EmailSendX, open **Automations**, add the **Abandoned Cart** template and turn it on; its emails already contain the link back to the cart and the list of items. As soon as the shopper orders, the reminders stop. **Send a test cart** on the settings card sends the first reminder to your own address so you can see it.
+
+= Who gets abandoned cart reminders, and what about consent? =
+
+You decide, with **Who can get reminders**: everyone who enters their email (they see a short notice with a "No thanks" link), only shoppers who tick an "Email me a reminder" box, or only logged-in customers. Shoppers who decline are never saved or emailed, every reminder has an unsubscribe link, and saved carts are deleted after 30 days. Which option your shop needs depends on the privacy rules where your customers live — ask your adviser if you are unsure.
 
 = Where do I find sync history? =
 

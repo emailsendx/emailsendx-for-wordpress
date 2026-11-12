@@ -2200,3 +2200,53 @@
 		flex-direction: column;
 	}
 }
+
+/* ─── Abandoned cart recovery card (Settings) ─── */
+.esx-cart-grid { margin-top: 4px; }
+.esx-cart-modes {
+	display: grid;
+	gap: 6px;
+}
+.esx-cart-mode {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 9px 12px;
+	border: 1px solid var(--esx-border);
+	border-radius: 10px;
+	background: #fff;
+	cursor: pointer;
+	transition: border-color 0.15s ease, background 0.15s ease;
+}
+.esx-cart-mode:hover { border-color: rgba(39, 122, 255, 0.35); }
+.esx-cart-mode:has(input:checked) {
+	border-color: var(--esx-primary);
+	background: rgba(39, 122, 255, 0.04);
+}
+.esx-cart-mode input[type="radio"] { margin: 3px 0 0; flex-shrink: 0; }
+.esx-cart-mode-title {
+	display: block;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--esx-text);
+}
+.esx-cart-mode-sub {
+	display: block;
+	font-size: 12px;
+	line-height: 1.45;
+	color: var(--esx-text-muted);
+}
+.esx-cart .esx-stat-grid { margin-bottom: 0; }
+.esx-cart .esx-stat { margin: 14px 0 6px; }
+.esx-cart-window { margin: 0 0 12px; }
+.esx-cart-next { margin: 10px 0 0; }
+.esx-cart-result {
+	margin: 0 0 12px;
+	padding: 9px 12px;
+	border-radius: 10px;
+	font-size: 13px;
+	border: 1px solid transparent;
+}
+.esx-cart-result.is-ok    { background: rgba(16, 185, 129, 0.08); color: #047857; border-color: rgba(16, 185, 129, 0.22); }
+.esx-cart-result.is-error { background: rgba(239, 68, 68, 0.08);  color: #b91c1c; border-color: rgba(239, 68, 68, 0.22); }
+

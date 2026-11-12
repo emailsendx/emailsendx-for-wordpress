@@ -177,6 +177,15 @@ class EmailSendX_Settings {
 		$out['sync_roles'] = $roles_clean;
 		$out['sync_role']  = ! empty( $roles_clean ) ? (string) $roles_clean[0] : '';
 
+		// Abandoned cart recovery. These three only change when the cart
+		// card itself is saved (it posts `cart_form`), so the page's other
+		// forms can never switch the feature off by leaving the box out.
+		if ( ! empty( $input['cart_form'] ) && class_exists( 'EmailSendX_Cart' ) ) {
+			$out['cart_enabled']      = ! empty( $input['cart_enabled'] );
+			$out['cart_idle_minutes'] = EmailSendX_Cart::sanitize_idle( isset( $input['cart_idle_minutes'] ) ? $input['cart_idle_minutes'] : 60 );
+			$out['cart_consent_mode'] = EmailSendX_Cart::sanitize_mode( isset( $input['cart_consent_mode'] ) ? $input['cart_consent_mode'] : 'notice' );
+		}
+
 		// Reset the API singleton so the next call uses the new creds.
 		if ( class_exists( 'EmailSendX_API' ) && method_exists( 'EmailSendX_API', 'reset_instance' ) ) {
 			EmailSendX_API::reset_instance();

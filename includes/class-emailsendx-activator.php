@@ -77,6 +77,11 @@ class EmailSendX_Activator {
 	 */
 	public static function deactivate() {
 		wp_clear_scheduled_hook( EMAILSENDX_SYNC_CRON_HOOK );
+		// Abandoned-cart scan + queued purchase reports. Saved carts stay
+		// until uninstall. ShaonPro.
+		if ( class_exists( 'EmailSendX_Cart' ) ) {
+			EmailSendX_Cart::unschedule();
+		}
 	}
 
 	/**

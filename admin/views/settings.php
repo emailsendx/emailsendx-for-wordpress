@@ -348,6 +348,159 @@ if ( ! empty( $settings['api_base'] ) ) {
 </form>
 
 <?php
+/* ─── Abandoned cart recovery (WooCommerce only) ────────────────────── */
+if ( class_exists( 'WooCommerce' ) && class_exists( 'EmailSendX_Cart' ) ) :
+	$esx_cart_on   = ! empty( $settings['cart_enabled'] );
+	$esx_cart_idle = EmailSendX_Cart::sanitize_idle( isset( $settings['cart_idle_minutes'] ) ? $settings['cart_idle_minutes'] : 60 );
+	$esx_cart_mode = EmailSendX_Cart::sanitize_mode( isset( $settings['cart_consent_mode'] ) ? $settings['cart_consent_mode'] : 'notice' );
+
+	if ( ! $is_ready ) {
+		$esx_cart_pill = array( 'warn', __( 'Connect first', 'emailsendx-sync' ) );
+	} elseif ( $esx_cart_on ) {
+		$esx_cart_pill = array( 'ok', __( 'On', 'emailsendx-sync' ) );
+	} else {
+		$esx_cart_pill = array( 'info', __( 'Off', 'emailsendx-sync' ) );
+	}
+
+	$esx_cart_idle_labels = array(
+		30  => __( '30 minutes', 'emailsendx-sync' ),
+		60  => __( '1 hour', 'emailsendx-sync' ),
+		120 => __( '2 hours', 'emailsendx-sync' ),
+		240 => __( '4 hours', 'emailsendx-sync' ),
+	);
+	$esx_cart_modes = array(
+		'notice'    => array(
+			__( 'Everyone who enters their email', 'emailsendx-sync' ),
+			__( 'Shoppers see a short notice under the email field, with a “No thanks” link.', 'emailsendx-sync' ),
+		),
+		'checkbox'  => array(
+			__( 'Only shoppers who tick a box', 'emailsendx-sync' ),
+			__( 'Adds an unticked “Email me a reminder” box under the email field.', 'emailsendx-sync' ),
+		),
+		'customers' => array(
+			__( 'Only logged-in customers', 'emailsendx-sync' ),
+			__( 'Guests are never tracked or emailed.', 'emailsendx-sync' ),
+		),
+	);
+
+	$esx_cart_test = get_transient( EmailSendX_Cart::TEST_TRANSIENT );
+	if ( is_array( $esx_cart_test ) ) {
+		delete_transient( EmailSendX_Cart::TEST_TRANSIENT );
+	}
+	?>
+	<form action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>" method="post" class="esx-form" id="esx-cart">
+		<?php settings_fields( 'emailsendx_sync_group' ); ?>
+		<?php /* Carry the page's other settings through untouched — the sanitizer reads absent boxes as "off". */ ?>
+		<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[api_base]" value="<?php echo esc_attr( $settings['api_base'] ); ?>" />
+		<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[api_key]" value="<?php echo esc_attr( $settings['api_key'] ); ?>" />
+		<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[default_list_id]" value="<?php echo esc_attr( $settings['default_list_id'] ); ?>" />
+		<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[auto_sync]" value="<?php echo ! empty( $settings['auto_sync'] ) ? '1' : '0'; ?>" />
+		<?php foreach ( $selected_roles as $esx_role_slug ) : ?>
+			<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[sync_roles][]" value="<?php echo esc_attr( $esx_role_slug ); ?>" />
+		<?php endforeach; ?>
+		<input type="hidden" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[cart_form]" value="1" />
+
+		<div class="esx-card esx-card-compact esx-cart">
+			<div class="esx-card-head esx-updates-head">
+				<div>
+					<h2 class="esx-card-title"><?php echo esc_html__( 'Abandoned cart recovery', 'emailsendx-sync' ); ?></h2>
+					<p class="esx-card-sub"><?php echo esc_html__( 'Email shoppers who leave without buying a link straight back to their cart. Reminders stop as soon as they order.', 'emailsendx-sync' ); ?></p>
+				</div>
+				<span class="esx-pill esx-pill-<?php echo esc_attr( $esx_cart_pill[0] ); ?>"><?php echo esc_html( $esx_cart_pill[1] ); ?></span>
+			</div>
+
+			<?php if ( is_array( $esx_cart_test ) && ! empty( $esx_cart_test['message'] ) ) : ?>
+				<p class="esx-cart-result <?php echo ! empty( $esx_cart_test['ok'] ) ? 'is-ok' : 'is-error'; ?>" role="status"><?php echo esc_html( $esx_cart_test['message'] ); ?></p>
+			<?php endif; ?>
+
+			<div class="esx-field">
+				<label class="esx-toggle">
+					<input
+						type="checkbox"
+						name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[cart_enabled]"
+						value="1"
+						<?php checked( $esx_cart_on ); ?>
+					/>
+					<span class="esx-toggle-track" aria-hidden="true"></span>
+					<span class="esx-toggle-label"><?php echo esc_html__( 'Recover abandoned carts', 'emailsendx-sync' ); ?></span>
+				</label>
+				<p class="esx-help" style="margin-left: 48px;"><?php echo esc_html__( 'Saves a shopper’s cart once they enter their email. If they leave, EmailSendX gets the cart and sends your reminder sequence.', 'emailsendx-sync' ); ?></p>
+			</div>
+
+			<div class="esx-behavior-grid esx-cart-grid">
+				<div class="esx-field">
+					<label class="esx-label" for="esx-cart-idle"><?php echo esc_html__( 'Count a cart as abandoned after', 'emailsendx-sync' ); ?></label>
+					<select id="esx-cart-idle" class="esx-select" name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[cart_idle_minutes]">
+						<?php foreach ( $esx_cart_idle_labels as $esx_minutes => $esx_label ) : ?>
+							<option value="<?php echo esc_attr( $esx_minutes ); ?>" <?php selected( $esx_cart_idle, $esx_minutes ); ?>><?php echo esc_html( $esx_label ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<p class="esx-help"><?php echo esc_html__( 'Time since the shopper last changed their cart. One hour suits most shops.', 'emailsendx-sync' ); ?></p>
+				</div>
+
+				<div class="esx-field">
+					<span class="esx-label" id="esx-cart-mode-label"><?php echo esc_html__( 'Who can get reminders', 'emailsendx-sync' ); ?></span>
+					<div class="esx-cart-modes" role="radiogroup" aria-labelledby="esx-cart-mode-label">
+						<?php foreach ( $esx_cart_modes as $esx_mode_slug => $esx_mode_copy ) : ?>
+							<label class="esx-cart-mode">
+								<input
+									type="radio"
+									name="<?php echo esc_attr( EMAILSENDX_SYNC_OPT_SETTINGS ); ?>[cart_consent_mode]"
+									value="<?php echo esc_attr( $esx_mode_slug ); ?>"
+									<?php checked( $esx_cart_mode, $esx_mode_slug ); ?>
+								/>
+								<span>
+									<span class="esx-cart-mode-title"><?php echo esc_html( $esx_mode_copy[0] ); ?></span>
+									<span class="esx-cart-mode-sub"><?php echo esc_html( $esx_mode_copy[1] ); ?></span>
+								</span>
+							</label>
+						<?php endforeach; ?>
+					</div>
+					<p class="esx-help"><?php echo esc_html__( 'Which option is right depends on the privacy rules where your customers live — ask your adviser if you are unsure. Shoppers who decline are never saved, and saved carts are deleted after 30 days.', 'emailsendx-sync' ); ?></p>
+				</div>
+			</div>
+
+			<?php if ( $esx_cart_on ) :
+				$esx_cart_stats = EmailSendX_Cart::get_stats();
+				?>
+				<div class="esx-stat-grid esx-updates-grid">
+					<div class="esx-stat">
+						<span class="esx-stat-number esx-updates-value"><?php echo esc_html( number_format_i18n( $esx_cart_stats['tracked'] ) ); ?></span>
+						<span class="esx-stat-label"><?php echo esc_html__( 'Carts saved', 'emailsendx-sync' ); ?></span>
+					</div>
+					<div class="esx-stat">
+						<span class="esx-stat-number esx-updates-value"><?php echo esc_html( number_format_i18n( $esx_cart_stats['abandoned'] ) ); ?></span>
+						<span class="esx-stat-label"><?php echo esc_html__( 'Reminders started', 'emailsendx-sync' ); ?></span>
+					</div>
+					<div class="esx-stat">
+						<span class="esx-stat-number esx-updates-value"><?php echo esc_html( number_format_i18n( $esx_cart_stats['recovered'] ) ); ?></span>
+						<span class="esx-stat-label"><?php echo esc_html__( 'Recovered orders', 'emailsendx-sync' ); ?></span>
+					</div>
+				</div>
+				<p class="esx-help esx-cart-window"><?php echo esc_html__( 'Last 30 days.', 'emailsendx-sync' ); ?></p>
+			<?php endif; ?>
+
+			<div class="esx-updates-actions">
+				<button type="submit" class="esx-btn esx-btn-primary"><?php echo esc_html__( 'Save settings', 'emailsendx-sync' ); ?></button>
+				<?php if ( $esx_cart_on && $is_ready ) : ?>
+					<button type="submit" form="esx-cart-test-form" class="esx-btn esx-btn-secondary"><?php echo esc_html__( 'Send a test cart', 'emailsendx-sync' ); ?></button>
+					<a class="esx-updates-link" href="<?php echo esc_url( EmailSendX_Cart::sequences_url() ); ?>" target="_blank" rel="noopener noreferrer"><?php echo esc_html__( 'Set up the reminder emails in EmailSendX', 'emailsendx-sync' ); ?></a>
+				<?php endif; ?>
+			</div>
+			<?php if ( $esx_cart_on && $is_ready ) : ?>
+				<p class="esx-help esx-cart-next"><?php echo esc_html__( 'In EmailSendX, open Automations, add the “Abandoned Cart” template and turn it on. “Send a test cart” then sends the first reminder to your own address.', 'emailsendx-sync' ); ?></p>
+			<?php endif; ?>
+		</div>
+	</form>
+	<?php if ( $esx_cart_on && $is_ready ) : ?>
+		<form id="esx-cart-test-form" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" hidden>
+			<?php wp_nonce_field( EmailSendX_Cart::NONCE_TEST ); ?>
+			<input type="hidden" name="action" value="emailsendx_cart_test" />
+		</form>
+	<?php endif; ?>
+<?php endif; ?>
+
+<?php
 /* ─── Updates ───────────────────────────────────────────────────────── */
 if ( current_user_can( 'update_plugins' ) ) :
 	$esx_u = EmailSendX_Updates::summary();

@@ -196,6 +196,10 @@ function emailsendx_sync_bootstrap() {
 	new EmailSendX_Forms();
 	new EmailSendX_Subscribe();
 
+	// WooCommerce abandoned-cart recovery. Off until the merchant turns it
+	// on in Settings; registers only its cron / privacy hooks until then.
+	new EmailSendX_Cart();
+
 	// Page-builder adapters — each maps the two shortcodes onto that
 	// builder's native elements. Both self-guard (WPBakery on
 	// WPB_VC_VERSION, Elementor on the `elementor/loaded` action), so each
@@ -232,6 +236,10 @@ function emailsendx_sync_get_settings() {
 		'auto_sync'       => false,
 		'sync_role'       => '',        // DEPRECATED scalar, kept for back-compat.
 		'sync_roles'      => array(),   // array of role slugs. empty = all roles.
+		// Abandoned cart recovery (WooCommerce) — see EmailSendX_Cart.
+		'cart_enabled'      => false,
+		'cart_idle_minutes' => 60,        // 30 | 60 | 120 | 240
+		'cart_consent_mode' => 'notice',  // notice | checkbox | customers
 	);
 	$saved = get_option( EMAILSENDX_SYNC_OPT_SETTINGS, array() );
 	return wp_parse_args( is_array( $saved ) ? $saved : array(), $defaults );

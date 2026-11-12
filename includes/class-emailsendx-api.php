@@ -258,6 +258,35 @@ class EmailSendX_API {
 	}
 
 	/**
+	 * POST /api/v1/events — fire a custom event for the contact with this
+	 * email (e.g. `cart_abandoned`, `purchase_completed`). EmailSendX never
+	 * creates a contact from an event; upsert the contact first when it
+	 * has to exist.
+	 *
+	 * @since 1.5.0
+	 *
+	 * @param string $email          Contact email.
+	 * @param string $name           Event name.
+	 * @param array  $data           Payload, readable in automation emails as {{event.<key>}}.
+	 * @param bool   $ignore_missing True: an unknown email is a success with `matched: false`, not a 404.
+	 * @return array|WP_Error
+	 */
+	public function send_event( $email, $name, $data = array(), $ignore_missing = false ) {
+		$body = array(
+			'email' => strtolower( trim( (string) $email ) ),
+			'name'  => (string) $name,
+		);
+		if ( is_array( $data ) && ! empty( $data ) ) {
+			$body['data'] = $data;
+		}
+		if ( $ignore_missing ) {
+			$body['ignoreMissing'] = true;
+		}
+
+		return $this->request( 'POST', '/api/v1/events', $body );
+	}
+
+	/**
 	 * Friendly wrapper around whoami() for the "Test connection" button.
 	 *
 	 * @return array { ok:bool, message:string, workspace:?string }

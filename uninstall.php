@@ -51,6 +51,18 @@ if ( class_exists( 'EmailSendX_Log' ) && method_exists( 'EmailSendX_Log', 'drop_
 	$wpdb->query( "DROP TABLE IF EXISTS {$emailsendx_log_table_name}" );
 }
 
+/* ─── 1b. Abandoned-cart recovery: saved carts, choices, cron ──────── */
+
+// Table name and keys are hardcoded for the same reason as above — they
+// mirror EmailSendX_Cart. ShaonPro.
+// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}emailsendx_carts" );
+delete_metadata( 'user', 0, '_emailsendx_cart_consent', '', true );
+wp_clear_scheduled_hook( 'emailsendx_sync_cart_scan' );
+wp_unschedule_hook( 'emailsendx_sync_cart_purchase' );
+delete_transient( 'emailsendx_sync_cart_lock' );
+delete_transient( 'emailsendx_sync_cart_test' );
+
 /* ─── 2. Delete plugin options ─────────────────────────────────────── */
 
 delete_option( $emailsendx_opt_settings );
