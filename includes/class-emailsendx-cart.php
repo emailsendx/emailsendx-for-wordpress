@@ -2,8 +2,8 @@
 /**
  * WooCommerce abandoned-cart recovery.
  *
- * Off by default. When the merchant turns it on (Settings → Abandoned cart
- * recovery) the plugin:
+ * Off by default. When the merchant turns it on (the Carts tab) the
+ * plugin:
  *
  *   1. Remembers each shopper's cart — once it knows their email and they
  *      are allowed to get reminders (see "Who can get reminders") — in its
@@ -37,7 +37,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class EmailSendX_Cart {
 
 	/** Bump when the table definition changes; dbDelta runs on mismatch. */
-	const DB_VERSION = '1';
+	const DB_VERSION = '2';
 
 	/** Recurring scan for idle carts. */
 	const CRON_HOOK = 'emailsendx_sync_cart_scan';
@@ -95,6 +95,10 @@ class EmailSendX_Cart {
 	/** Nonce actions. */
 	const NONCE_CAPTURE = 'emailsendx_cart_capture';
 	const NONCE_TEST    = 'emailsendx_cart_test';
+	const NONCE_DELETE  = 'emailsendx_cart_delete';
+
+	/** Rows per page in the Carts tab. */
+	const PER_PAGE = 20;
 
 	/**
 	 * Set when this request changed the cart or the shopper's details;
@@ -121,6 +125,7 @@ class EmailSendX_Cart {
 		add_filter( 'wp_privacy_personal_data_erasers', array( __CLASS__, 'register_eraser' ) );
 		add_action( 'admin_init', array( __CLASS__, 'add_privacy_policy_content' ) );
 		add_action( 'admin_post_emailsendx_cart_test', array( __CLASS__, 'handle_test' ) );
+		add_action( 'admin_post_emailsendx_cart_delete', array( __CLASS__, 'handle_delete' ) );
 
 		if ( ! self::is_active() ) {
 			return;
@@ -289,9 +294,49 @@ class EmailSendX_Cart {
 		if ( isset( $state['cart_db'] ) && self::DB_VERSION === (string) $state['cart_db'] ) {
 			return;
 		}
+		$upgrading = ! empty( $state['cart_db'] );
 		self::install_table();
 		$state['cart_db'] = self::DB_VERSION;
 		update_option( EMAILSENDX_SYNC_OPT_STATE, $state );
+		if ( $upgrading ) {
+			// Order totals need WooCommerce fully loaded, which it is not yet
+			// when this runs from the plugin's constructor.
+			if ( did_action( 'init' ) ) {
+				self::backfill_values();
+			} else {
+				add_action( 'init', array( __CLASS__, 'backfill_values' ), 99 );
+			}
+		}
+	}
+
+	/**
+	 * Version 2 added the value columns. Fill them for carts saved before
+	 * the upgrade, from the stored snapshot and the linked order, so the
+	 * Carts tab shows amounts for them too.
+	 */
+	public static function backfill_values() {
+		global $wpdb;
+		$table = self::table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( "SELECT id, cart, order_id, status, updated_at FROM {$table} WHERE cart_value = 0 ORDER BY id DESC LIMIT 1000", ARRAY_A );
+		foreach ( (array) $rows as $row ) {
+			$snapshot = json_decode( (string) $row['cart'], true );
+			$data     = array();
+			if ( is_array( $snapshot ) ) {
+				$data['cart_value'] = isset( $snapshot['value'] ) ? round( (float) $snapshot['value'], 2 ) : 0;
+				$data['currency']   = isset( $snapshot['currency'] ) ? self::clip( $snapshot['currency'], 8 ) : '';
+			}
+			if ( in_array( $row['status'], array( 'ordered', 'recovered' ), true ) ) {
+				$data['closed_at'] = $row['updated_at'];
+				$order             = ( (int) $row['order_id'] > 0 && function_exists( 'wc_get_order' ) ) ? wc_get_order( (int) $row['order_id'] ) : null;
+				if ( $order ) {
+					$data['order_value'] = round( (float) $order->get_total(), 2 );
+				}
+			}
+			if ( ! empty( $data ) ) {
+				$wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) );
+			}
+		}
 	}
 
 	/**
@@ -324,6 +369,11 @@ class EmailSendX_Cart {
 			created_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
 			updated_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
 			abandoned_at DATETIME NULL,
+			cart_value DECIMAL(18,2) NOT NULL DEFAULT 0,
+			currency VARCHAR(8) NOT NULL DEFAULT '',
+			order_value DECIMAL(18,2) NOT NULL DEFAULT 0,
+			closed_at DATETIME NULL,
+			last_error VARCHAR(255) NOT NULL DEFAULT '',
 			PRIMARY KEY  (id),
 			UNIQUE KEY session_key (session_key),
 			KEY token (token),
@@ -732,6 +782,8 @@ class EmailSendX_Cart {
 			'cart'       => wp_json_encode( $snapshot ),
 			'cart_hash'  => $hash,
 			'item_count' => (int) $snapshot['count'],
+			'cart_value' => (float) $snapshot['value'],
+			'currency'   => self::clip( $snapshot['currency'], 8 ),
 			'updated_at' => $now,
 		);
 
@@ -741,8 +793,11 @@ class EmailSendX_Cart {
 			$data['status']       = 'active';
 			$data['attempts']     = 0;
 			$data['order_id']     = 0;
+			$data['order_value']  = 0;
+			$data['last_error']   = '';
 			$data['created_at']   = $now;
 			$data['abandoned_at'] = null;
+			$data['closed_at']    = null;
 			if ( $row ) {
 				$wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) );
 			} else {
@@ -755,8 +810,8 @@ class EmailSendX_Cart {
 				$wpdb->query(
 					$wpdb->prepare(
 						"INSERT INTO {$table}
-							(session_key, user_id, email, first_name, last_name, cart, cart_hash, item_count, token, status, attempts, order_id, created_at, updated_at)
-						VALUES (%s, %d, %s, %s, %s, %s, %s, %d, %s, 'active', 0, 0, %s, %s)
+							(session_key, user_id, email, first_name, last_name, cart, cart_hash, item_count, cart_value, currency, token, status, attempts, order_id, created_at, updated_at)
+						VALUES (%s, %d, %s, %s, %s, %s, %s, %d, %f, %s, %s, 'active', 0, 0, %s, %s)
 						ON DUPLICATE KEY UPDATE
 							user_id = VALUES(user_id),
 							email = VALUES(email),
@@ -765,6 +820,8 @@ class EmailSendX_Cart {
 							cart = VALUES(cart),
 							cart_hash = VALUES(cart_hash),
 							item_count = VALUES(item_count),
+							cart_value = VALUES(cart_value),
+							currency = VALUES(currency),
 							updated_at = VALUES(updated_at)",
 						$key,
 						$data['user_id'],
@@ -774,6 +831,8 @@ class EmailSendX_Cart {
 						$data['cart'],
 						$data['cart_hash'],
 						$data['item_count'],
+						$data['cart_value'],
+						$data['currency'],
 						$data['token'],
 						$now,
 						$now
@@ -796,8 +855,9 @@ class EmailSendX_Cart {
 			} elseif ( 'active' !== $row['status'] ) {
 				// They came back and changed the cart after a reminder (or a
 				// failed send): watch it again. The emailed link keeps working.
-				$data['status']   = 'active';
-				$data['attempts'] = 0;
+				$data['status']     = 'active';
+				$data['attempts']   = 0;
+				$data['last_error'] = '';
 			}
 			$wpdb->update( $table, $data, array( 'id' => (int) $row['id'] ) );
 		}
@@ -1164,6 +1224,7 @@ class EmailSendX_Cart {
 				$table,
 				array(
 					'status'      => 'ordered',
+					'closed_at'   => self::now(),
 					'session_key' => 'o' . $id . '-' . substr( (string) $row['session_key'], 0, 40 ),
 				),
 				array( 'id' => $id )
@@ -1209,11 +1270,14 @@ class EmailSendX_Cart {
 			return 'skipped';
 		}
 
+		self::note_automations( $sent );
+
 		$wpdb->update(
 			$table,
 			array(
 				'status'       => 'abandoned',
 				'abandoned_at' => self::now(),
+				'last_error'   => '',
 			),
 			array( 'id' => $id )
 		);
@@ -1235,8 +1299,9 @@ class EmailSendX_Cart {
 		$wpdb->update(
 			self::table_name(),
 			array(
-				'attempts' => $attempts,
-				'status'   => $attempts >= self::MAX_ATTEMPTS ? 'failed' : 'active',
+				'attempts'   => $attempts,
+				'status'     => $attempts >= self::MAX_ATTEMPTS ? 'failed' : 'active',
+				'last_error' => self::clip( wp_strip_all_tags( (string) $message ), 255 ),
 			),
 			array( 'id' => (int) $row['id'] )
 		);
@@ -1337,7 +1402,7 @@ class EmailSendX_Cart {
 		$key     = self::session_key();
 
 		$where = array();
-		$args  = array( (int) $order->get_id() );
+		$args  = array( (int) $order->get_id(), round( (float) $order->get_total(), 2 ), self::now() );
 		if ( '' !== $email ) {
 			$where[] = 'email = %s';
 			$args[]  = $email;
@@ -1360,6 +1425,8 @@ class EmailSendX_Cart {
 		$sql = "UPDATE {$table}
 			SET status = IF(abandoned_at IS NULL, 'ordered', 'recovered'),
 				order_id = %d,
+				order_value = %f,
+				closed_at = %s,
 				session_key = CONCAT('o', id, '-', LEFT(session_key, 40))
 			WHERE (" . implode( ' OR ', $where ) . ") AND status IN ('active','abandoned','failed','skipped')";
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
@@ -1456,7 +1523,499 @@ class EmailSendX_Cart {
 		return trim( html_entity_decode( wp_strip_all_tags( $html ), ENT_QUOTES, 'UTF-8' ) );
 	}
 
-	/* ─── Settings card ────────────────────────────────────────────── */
+	/* ─── Carts tab ────────────────────────────────────────────────── */
+
+	/**
+	 * Remember what EmailSendX said about the last cart event: how many
+	 * active automations were waiting for it. The Carts tab uses it to
+	 * tick "reminder emails are on" without another API call.
+	 *
+	 * @param mixed $response send_event() result.
+	 * @param bool  $is_test  True for "Send a test cart".
+	 */
+	protected static function note_automations( $response, $is_test = false ) {
+		if ( ! is_array( $response ) || ! isset( $response['data'] ) || ! is_array( $response['data'] ) || ! array_key_exists( 'matchingAutomations', $response['data'] ) ) {
+			return;
+		}
+		$state = get_option( EMAILSENDX_SYNC_OPT_STATE, array() );
+		$state = is_array( $state ) ? $state : array();
+		$count = (int) $response['data']['matchingAutomations'];
+		$same  = isset( $state['cart_automations'] ) && (int) $state['cart_automations'] === $count;
+		if ( $same && ! $is_test ) {
+			return; // Nothing new to store — keep the scan free of option writes.
+		}
+		$state['cart_automations'] = $count;
+		if ( $is_test ) {
+			$state['cart_test_at'] = time();
+		}
+		update_option( EMAILSENDX_SYNC_OPT_STATE, $state );
+	}
+
+	/**
+	 * How each stored status reads to a merchant: label, pill colour and a
+	 * one-line explanation.
+	 *
+	 * @return array<string,array{label:string,tone:string,help:string}>
+	 */
+	public static function status_labels() {
+		return array(
+			'active'    => array(
+				'label' => __( 'Shopping', 'emailsendx-sync' ),
+				'tone'  => 'info',
+				'help'  => __( 'The cart is saved and still being watched. No reminder has been sent.', 'emailsendx-sync' ),
+			),
+			'abandoned' => array(
+				'label' => __( 'Abandoned', 'emailsendx-sync' ),
+				'tone'  => 'warn',
+				'help'  => __( 'The shopper left. EmailSendX has the cart and is sending your reminder emails.', 'emailsendx-sync' ),
+			),
+			'recovered' => array(
+				'label' => __( 'Recovered', 'emailsendx-sync' ),
+				'tone'  => 'ok',
+				'help'  => __( 'The shopper ordered after a reminder was sent.', 'emailsendx-sync' ),
+			),
+			'ordered'   => array(
+				'label' => __( 'Ordered', 'emailsendx-sync' ),
+				'tone'  => 'muted',
+				'help'  => __( 'The shopper ordered before any reminder was needed.', 'emailsendx-sync' ),
+			),
+			'skipped'   => array(
+				'label' => __( 'Not emailed', 'emailsendx-sync' ),
+				'tone'  => 'muted',
+				'help'  => __( 'EmailSendX would not email this address — it is unsubscribed, suppressed, or your contact limit is reached.', 'emailsendx-sync' ),
+			),
+			'failed'    => array(
+				'label' => __( 'Could not send', 'emailsendx-sync' ),
+				'tone'  => 'error',
+				'help'  => __( 'The cart could not be sent to EmailSendX after three tries. See the Log tab.', 'emailsendx-sync' ),
+			),
+		);
+	}
+
+	/**
+	 * The filters above the carts table, and the stored statuses each one
+	 * shows.
+	 *
+	 * @return array<string,array{label:string,statuses:string[]}>
+	 */
+	public static function filter_groups() {
+		return array(
+			'all'       => array(
+				'label'    => __( 'All', 'emailsendx-sync' ),
+				'statuses' => array(),
+			),
+			'abandoned' => array(
+				'label'    => __( 'Abandoned', 'emailsendx-sync' ),
+				'statuses' => array( 'abandoned' ),
+			),
+			'recovered' => array(
+				'label'    => __( 'Recovered', 'emailsendx-sync' ),
+				'statuses' => array( 'recovered' ),
+			),
+			'active'    => array(
+				'label'    => __( 'Shopping', 'emailsendx-sync' ),
+				'statuses' => array( 'active' ),
+			),
+			'ordered'   => array(
+				'label'    => __( 'Ordered', 'emailsendx-sync' ),
+				'statuses' => array( 'ordered' ),
+			),
+			'unsent'    => array(
+				'label'    => __( 'Not sent', 'emailsendx-sync' ),
+				'statuses' => array( 'skipped', 'failed' ),
+			),
+		);
+	}
+
+	/**
+	 * A valid filter slug; anything else is 'all'.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	public static function sanitize_filter( $value ) {
+		$groups = self::filter_groups();
+		return is_string( $value ) && isset( $groups[ $value ] ) ? $value : 'all';
+	}
+
+	/**
+	 * A valid period for the Carts tab: 7 or 30 days. Carts are kept 30
+	 * days, so 30 is everything.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return int
+	 */
+	public static function sanitize_range( $value ) {
+		return 7 === (int) $value ? 7 : self::RETENTION_DAYS;
+	}
+
+	/**
+	 * Share of abandoned carts that ended in an order, as a whole percent.
+	 *
+	 * @param int $abandoned Carts a reminder went out for (recovered ones included).
+	 * @param int $recovered Of those, how many ordered.
+	 * @return int 0–100.
+	 */
+	public static function recovery_rate( $abandoned, $recovered ) {
+		$abandoned = (int) $abandoned;
+		$recovered = (int) $recovered;
+		if ( $abandoned <= 0 || $recovered <= 0 ) {
+			return 0;
+		}
+		return (int) min( 100, round( $recovered / $abandoned * 100 ) );
+	}
+
+	/**
+	 * An amount for the admin screens, in the given currency, as plain text.
+	 *
+	 * @param float  $amount   Amount.
+	 * @param string $currency ISO code; empty for the shop's currency.
+	 * @return string
+	 */
+	public static function admin_money( $amount, $currency = '' ) {
+		if ( ! function_exists( 'wc_price' ) ) {
+			return trim( number_format( (float) $amount, 2 ) . ' ' . $currency );
+		}
+		$args = '' !== (string) $currency ? array( 'currency' => (string) $currency ) : array();
+		return trim( html_entity_decode( wp_strip_all_tags( wc_price( (float) $amount, $args ) ), ENT_QUOTES, 'UTF-8' ) );
+	}
+
+	/**
+	 * Bring an existing carts table up to this version. The table is
+	 * normally upgraded while the feature is on; this covers a shop that
+	 * switched it off before updating and then opens the Carts tab.
+	 */
+	public static function ensure_table_current() {
+		if ( self::table_ready() ) {
+			self::maybe_install();
+		}
+	}
+
+	/**
+	 * The figures at the top of the Carts tab.
+	 *
+	 * @param int $days 7 or 30.
+	 * @return array{tracked:int,abandoned:int,recovered:int,revenue:float,open_value:float,rate:int}
+	 */
+	public static function get_overview( $days = 30 ) {
+		$out = array(
+			'tracked'    => 0,
+			'abandoned'  => 0,
+			'recovered'  => 0,
+			'revenue'    => 0.0,
+			'open_value' => 0.0,
+			'rate'       => 0,
+		);
+		if ( ! self::table_ready() ) {
+			return $out;
+		}
+		global $wpdb;
+		$table  = self::table_name();
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - self::sanitize_range( $days ) * DAY_IN_SECONDS );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT COUNT(*) AS tracked, SUM(abandoned_at IS NOT NULL) AS abandoned, SUM(status = 'recovered') AS recovered, SUM(IF(status = 'recovered', order_value, 0)) AS revenue, SUM(IF(status = 'abandoned', cart_value, 0)) AS open_value FROM {$table} WHERE updated_at >= %s", $cutoff ), ARRAY_A );
+		if ( is_array( $row ) ) {
+			$out['tracked']    = (int) $row['tracked'];
+			$out['abandoned']  = (int) $row['abandoned'];
+			$out['recovered']  = (int) $row['recovered'];
+			$out['revenue']    = (float) $row['revenue'];
+			$out['open_value'] = (float) $row['open_value'];
+			$out['rate']       = self::recovery_rate( $out['abandoned'], $out['recovered'] );
+		}
+		return $out;
+	}
+
+	/**
+	 * One page of carts for the table, newest activity first.
+	 *
+	 * @param array $args { filter, search, page, days }.
+	 * @return array{rows:array,total:int,pages:int,page:int,counts:array<string,int>}
+	 */
+	public static function query_carts( $args = array() ) {
+		$out = array(
+			'rows'   => array(),
+			'total'  => 0,
+			'pages'  => 1,
+			'page'   => 1,
+			'counts' => array(),
+		);
+		if ( ! self::table_ready() ) {
+			return $out;
+		}
+		global $wpdb;
+		$table  = self::table_name();
+		$groups = self::filter_groups();
+		$filter = self::sanitize_filter( isset( $args['filter'] ) ? $args['filter'] : 'all' );
+		$search = isset( $args['search'] ) ? trim( (string) $args['search'] ) : '';
+		$page   = max( 1, isset( $args['page'] ) ? (int) $args['page'] : 1 );
+		$cutoff = gmdate( 'Y-m-d H:i:s', time() - self::sanitize_range( isset( $args['days'] ) ? $args['days'] : 30 ) * DAY_IN_SECONDS );
+
+		$where  = array( 'updated_at >= %s' );
+		$params = array( $cutoff );
+		if ( '' !== $search ) {
+			$like     = '%' . $wpdb->esc_like( $search ) . '%';
+			$where[]  = '(email LIKE %s OR first_name LIKE %s OR last_name LIKE %s)';
+			$params[] = $like;
+			$params[] = $like;
+			$params[] = $like;
+		}
+		$base = implode( ' AND ', $where );
+
+		// Counts per status for the filter pills (same period and search).
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$by_status = $wpdb->get_results( $wpdb->prepare( "SELECT status, COUNT(*) AS n FROM {$table} WHERE {$base} GROUP BY status", $params ), ARRAY_A );
+		$per       = array();
+		foreach ( (array) $by_status as $r ) {
+			$per[ (string) $r['status'] ] = (int) $r['n'];
+		}
+		foreach ( $groups as $slug => $group ) {
+			$out['counts'][ $slug ] = empty( $group['statuses'] )
+				? array_sum( $per )
+				: array_sum( array_intersect_key( $per, array_flip( $group['statuses'] ) ) );
+		}
+
+		if ( ! empty( $groups[ $filter ]['statuses'] ) ) {
+			$marks  = implode( ',', array_fill( 0, count( $groups[ $filter ]['statuses'] ), '%s' ) );
+			$base  .= " AND status IN ({$marks})";
+			$params = array_merge( $params, $groups[ $filter ]['statuses'] );
+		}
+
+		$out['total'] = (int) $out['counts'][ $filter ];
+		$out['pages'] = max( 1, (int) ceil( $out['total'] / self::PER_PAGE ) );
+		$out['page']  = min( $page, $out['pages'] );
+
+		$params[] = self::PER_PAGE;
+		$params[] = ( $out['page'] - 1 ) * self::PER_PAGE;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$rows        = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE {$base} ORDER BY updated_at DESC, id DESC LIMIT %d OFFSET %d", $params ), ARRAY_A );
+		$out['rows'] = is_array( $rows ) ? $rows : array();
+		return $out;
+	}
+
+	/**
+	 * One cart, with its snapshot decoded into `items`, `coupons`, `total`.
+	 *
+	 * @param int $id Row id.
+	 * @return array|null
+	 */
+	public static function get_cart( $id ) {
+		if ( ! self::table_ready() || (int) $id <= 0 ) {
+			return null;
+		}
+		global $wpdb;
+		$table = self::table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE id = %d", (int) $id ), ARRAY_A );
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * A cart's saved contents as plain arrays, safe against a missing or
+	 * broken snapshot.
+	 *
+	 * @param array $row Cart row.
+	 * @return array{items:array,coupons:array,total:string}
+	 */
+	public static function cart_contents( $row ) {
+		$snapshot = json_decode( isset( $row['cart'] ) ? (string) $row['cart'] : '', true );
+		$snapshot = is_array( $snapshot ) ? $snapshot : array();
+		$items    = array();
+		foreach ( isset( $snapshot['items'] ) && is_array( $snapshot['items'] ) ? $snapshot['items'] : array() as $line ) {
+			if ( ! is_array( $line ) || empty( $line['name'] ) ) {
+				continue;
+			}
+			$items[] = array(
+				'name'      => (string) $line['name'],
+				'qty'       => isset( $line['qty'] ) ? max( 1, (int) $line['qty'] ) : 1,
+				'price'     => isset( $line['price'] ) ? (string) $line['price'] : '',
+				'url'       => isset( $line['url'] ) ? (string) $line['url'] : '',
+				'image_url' => isset( $line['image_url'] ) ? (string) $line['image_url'] : '',
+			);
+		}
+		return array(
+			'items'   => $items,
+			'coupons' => isset( $snapshot['coupons'] ) && is_array( $snapshot['coupons'] ) ? array_values( array_map( 'strval', $snapshot['coupons'] ) ) : array(),
+			'total'   => isset( $snapshot['total'] ) ? (string) $snapshot['total'] : '',
+		);
+	}
+
+	/**
+	 * "Blue T-shirt + 2 more" — the cart in a few words, for the table.
+	 *
+	 * @param array $items Items from cart_contents().
+	 * @return string
+	 */
+	public static function cart_summary( $items ) {
+		$items = is_array( $items ) ? array_values( $items ) : array();
+		if ( empty( $items ) ) {
+			return '';
+		}
+		$first = self::clip( isset( $items[0]['name'] ) ? $items[0]['name'] : '', 60 );
+		$more  = count( $items ) - 1;
+		if ( $more <= 0 ) {
+			return $first;
+		}
+		/* translators: 1: first product name, 2: number of other products */
+		return sprintf( _n( '%1$s + %2$d more', '%1$s + %2$d more', $more, 'emailsendx-sync' ), $first, $more );
+	}
+
+	/**
+	 * What happened to a cart, oldest first. Times are UTC MySQL strings;
+	 * an entry with `pending` has not happened yet.
+	 *
+	 * @param array $row          Cart row.
+	 * @param int   $idle_minutes Minutes before an untouched cart is abandoned.
+	 * @return array<int,array{key:string,time:string,tone:string,pending:bool}>
+	 */
+	public static function timeline( $row, $idle_minutes = 60 ) {
+		$status  = isset( $row['status'] ) ? (string) $row['status'] : 'active';
+		$created = isset( $row['created_at'] ) ? (string) $row['created_at'] : '';
+		$updated = isset( $row['updated_at'] ) ? (string) $row['updated_at'] : '';
+		$left    = ! empty( $row['abandoned_at'] ) ? (string) $row['abandoned_at'] : '';
+		$closed  = ! empty( $row['closed_at'] ) ? (string) $row['closed_at'] : '';
+
+		$steps   = array();
+		$steps[] = array(
+			'key'     => 'saved',
+			'time'    => $created,
+			'tone'    => 'info',
+			'pending' => false,
+		);
+		if ( '' !== $updated && $updated !== $created && ( '' === $left || $updated < $left ) ) {
+			$steps[] = array(
+				'key'     => 'changed',
+				'time'    => $updated,
+				'tone'    => 'info',
+				'pending' => false,
+			);
+		}
+		if ( '' !== $left ) {
+			$steps[] = array(
+				'key'     => 'abandoned',
+				'time'    => $left,
+				'tone'    => 'warn',
+				'pending' => false,
+			);
+			if ( '' !== $updated && $updated > $left && 'abandoned' === $status ) {
+				$steps[] = array(
+					'key'     => 'returned',
+					'time'    => $updated,
+					'tone'    => 'info',
+					'pending' => false,
+				);
+			}
+		}
+		if ( 'recovered' === $status || 'ordered' === $status ) {
+			$steps[] = array(
+				'key'     => $status,
+				'time'    => $closed,
+				'tone'    => 'recovered' === $status ? 'ok' : 'muted',
+				'pending' => false,
+			);
+		} elseif ( 'skipped' === $status || 'failed' === $status ) {
+			$steps[] = array(
+				'key'     => $status,
+				'time'    => '',
+				'tone'    => 'failed' === $status ? 'error' : 'muted',
+				'pending' => false,
+			);
+		} elseif ( 'active' === $status && '' !== $updated ) {
+			$due     = strtotime( $updated . ' UTC' );
+			$steps[] = array(
+				'key'     => 'due',
+				'time'    => $due ? gmdate( 'Y-m-d H:i:s', $due + max( 1, (int) $idle_minutes ) * 60 ) : '',
+				'tone'    => 'muted',
+				'pending' => true,
+			);
+		}
+		return $steps;
+	}
+
+	/**
+	 * The setup checklist at the top of the Carts tab.
+	 *
+	 * @return array<int,array{key:string,done:bool}>
+	 */
+	public static function setup_steps() {
+		$state = get_option( EMAILSENDX_SYNC_OPT_STATE, array() );
+		$state = is_array( $state ) ? $state : array();
+		return self::build_setup_steps(
+			emailsendx_sync_is_configured(),
+			self::is_enabled(),
+			isset( $state['cart_automations'] ) ? (int) $state['cart_automations'] : -1,
+			! empty( $state['cart_test_at'] )
+		);
+	}
+
+	/**
+	 * The checklist from plain facts. A step can only be done once the
+	 * steps before it are.
+	 *
+	 * @param bool $connected   API key saved.
+	 * @param bool $enabled     Cart recovery switched on.
+	 * @param int  $automations Active automations EmailSendX last reported for the cart event; -1 = never asked.
+	 * @param bool $tested      A test cart was sent successfully.
+	 * @return array<int,array{key:string,done:bool}>
+	 */
+	public static function build_setup_steps( $connected, $enabled, $automations, $tested ) {
+		$connected = (bool) $connected;
+		$enabled   = $connected && (bool) $enabled;
+		$emails    = $enabled && (int) $automations > 0;
+		$tested    = $emails && (bool) $tested;
+		return array(
+			array(
+				'key'  => 'connect',
+				'done' => $connected,
+			),
+			array(
+				'key'  => 'enable',
+				'done' => $enabled,
+			),
+			array(
+				'key'  => 'emails',
+				'done' => $emails,
+			),
+			array(
+				'key'  => 'test',
+				'done' => $tested,
+			),
+		);
+	}
+
+	/**
+	 * admin-post: delete one saved cart from the Carts tab.
+	 */
+	public static function handle_delete() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'emailsendx-sync' ) );
+		}
+		check_admin_referer( self::NONCE_DELETE );
+
+		$id      = isset( $_POST['cart_id'] ) ? (int) $_POST['cart_id'] : 0;
+		$removed = 0;
+		if ( $id > 0 && self::table_ready() ) {
+			global $wpdb;
+			$removed = (int) $wpdb->delete( self::table_name(), array( 'id' => $id ), array( '%d' ) );
+		}
+		set_transient(
+			self::TEST_TRANSIENT,
+			array(
+				'ok'      => $removed > 0,
+				'message' => $removed > 0
+					? __( 'Cart deleted. Reminders already started in EmailSendX are not stopped by this.', 'emailsendx-sync' )
+					: __( 'That cart no longer exists.', 'emailsendx-sync' ),
+			),
+			MINUTE_IN_SECONDS
+		);
+
+		$back = ( class_exists( 'EmailSendX_Admin' ) && method_exists( 'EmailSendX_Admin', 'get_admin_url' ) )
+			? EmailSendX_Admin::get_admin_url( 'carts' )
+			: admin_url( 'admin.php?page=emailsendx-sync&tab=carts' );
+		wp_safe_redirect( $back );
+		exit;
+	}
+
+	/* ─── Shared figures ────────────────────────────────────────────── */
 
 	/**
 	 * Counts for the status line. Rows live 30 days, so the table itself
@@ -1562,6 +2121,7 @@ class EmailSendX_Cart {
 				);
 			} else {
 				$count           = isset( $sent['data']['matchingAutomations'] ) ? (int) $sent['data']['matchingAutomations'] : 0;
+				self::note_automations( $sent, true );
 				$status['ok']    = true;
 				$status['message'] = $count > 0
 					? sprintf(
@@ -1580,9 +2140,9 @@ class EmailSendX_Cart {
 		set_transient( self::TEST_TRANSIENT, $status, MINUTE_IN_SECONDS );
 
 		$back = ( class_exists( 'EmailSendX_Admin' ) && method_exists( 'EmailSendX_Admin', 'get_admin_url' ) )
-			? EmailSendX_Admin::get_admin_url( 'settings' )
-			: admin_url( 'admin.php?page=emailsendx-sync&tab=settings' );
-		wp_safe_redirect( $back . '#esx-cart' );
+			? EmailSendX_Admin::get_admin_url( 'carts' )
+			: admin_url( 'admin.php?page=emailsendx-sync&tab=carts' );
+		wp_safe_redirect( $back );
 		exit;
 	}
 

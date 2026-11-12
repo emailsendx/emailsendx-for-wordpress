@@ -32,7 +32,7 @@ It works the same for content sites, membership sites, and WooCommerce stores. W
 
 - **Set it and forget it** — enable auto-sync once; new users and customers sync on signup and profile update.
 - **WooCommerce-aware** — billing name, company, phone, lifetime spend, and last order become mappable fields the moment WooCommerce is active.
-- **Abandoned cart recovery (WooCommerce)** — optional and off by default. Idle carts are sent to EmailSendX as a `cart_abandoned` event with a restore link and the items; a `purchase_completed` event stops the reminders. Three consent modes; saved carts are deleted after 30 days.
+- **Abandoned cart recovery (WooCommerce)** — optional and off by default. Idle carts are sent to EmailSendX as a `cart_abandoned` event with a restore link and the items; a `purchase_completed` event stops the reminders. Three consent modes; saved carts are deleted after 30 days. Its own **Carts** tab has the setup checklist, results (recovered orders and revenue), every saved cart with its details, and the settings.
 - **Field mapping that makes sense** — match WordPress fields to EmailSendX targets in a clean two-column UI, with merge-tag support (`{{contact.firstName}}`, `{{contact.custom.<key>}}`).
 - **Create custom fields on the fly** — add new EmailSendX custom fields right from the mapping screen.
 - **Manual or automatic** — one-click "Run sync now," scheduled syncs, or sync-on-change.

@@ -55,6 +55,12 @@ function untrailingslashit( $value ) {
 function sanitize_text_field( $value ) {
 	return trim( strip_tags( (string) $value ) );
 }
+function __( $text, $domain = '' ) {
+	return $text;
+}
+function _n( $single, $plural, $number, $domain = '' ) {
+	return 1 === (int) $number ? $single : $plural;
+}
 function sanitize_key( $value ) {
 	return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $value ) );
 }
@@ -291,6 +297,146 @@ same( 'idle time unchanged', 120, $saved['cart_idle_minutes'] );
 same( 'consent mode unchanged', 'customers', $saved['cart_consent_mode'] );
 same( 'and the other form\'s own value was saved', 'list_2', $saved['default_list_id'] );
 $GLOBALS['esx_test_settings'] = array();
+
+/* ─── Carts tab ────────────────────────────────────────────────────── */
+
+section( 'recovery_rate — share of abandoned carts that ordered' );
+same( 'nothing abandoned yet', 0, EmailSendX_Cart::recovery_rate( 0, 0 ) );
+same( 'one in four', 25, EmailSendX_Cart::recovery_rate( 4, 1 ) );
+same( 'rounds to a whole percent', 33, EmailSendX_Cart::recovery_rate( 3, 1 ) );
+same( 'never above 100', 100, EmailSendX_Cart::recovery_rate( 1, 3 ) );
+same( 'no recovered orders', 0, EmailSendX_Cart::recovery_rate( 5, 0 ) );
+
+section( 'sanitize_filter / sanitize_range' );
+same( 'a known filter is kept', 'recovered', EmailSendX_Cart::sanitize_filter( 'recovered' ) );
+same( 'an unknown filter becomes all', 'all', EmailSendX_Cart::sanitize_filter( 'drop table' ) );
+same( 'a non-string filter becomes all', 'all', EmailSendX_Cart::sanitize_filter( array( 'x' ) ) );
+same( '7 days is kept', 7, EmailSendX_Cart::sanitize_range( '7' ) );
+same( 'anything else is the full 30 days', 30, EmailSendX_Cart::sanitize_range( 90 ) );
+
+section( 'filter_groups / status_labels cover every stored status' );
+$esx_stored  = array( 'active', 'abandoned', 'recovered', 'ordered', 'skipped', 'failed' );
+$esx_grouped = array();
+foreach ( EmailSendX_Cart::filter_groups() as $esx_group ) {
+	$esx_grouped = array_merge( $esx_grouped, $esx_group['statuses'] );
+}
+sort( $esx_grouped );
+$esx_sorted = $esx_stored;
+sort( $esx_sorted );
+same( 'each status is in exactly one filter', $esx_sorted, $esx_grouped );
+same( 'each status has a label', array(), array_diff( $esx_stored, array_keys( EmailSendX_Cart::status_labels() ) ) );
+
+section( 'build_setup_steps — the checklist' );
+$esx_done = function ( $steps ) {
+	$out = array();
+	foreach ( $steps as $step ) {
+		$out[ $step['key'] ] = $step['done'];
+	}
+	return $out;
+};
+same(
+	'nothing done on a new install',
+	array( 'connect' => false, 'enable' => false, 'emails' => false, 'test' => false ),
+	$esx_done( EmailSendX_Cart::build_setup_steps( false, false, -1, false ) )
+);
+same(
+	'switched on but not connected does not count as on',
+	array( 'connect' => false, 'enable' => false, 'emails' => false, 'test' => false ),
+	$esx_done( EmailSendX_Cart::build_setup_steps( false, true, 2, true ) )
+);
+same(
+	'on, but EmailSendX has never been asked about automations',
+	array( 'connect' => true, 'enable' => true, 'emails' => false, 'test' => false ),
+	$esx_done( EmailSendX_Cart::build_setup_steps( true, true, -1, false ) )
+);
+same(
+	'a test with no automation waiting ticks nothing more',
+	array( 'connect' => true, 'enable' => true, 'emails' => false, 'test' => false ),
+	$esx_done( EmailSendX_Cart::build_setup_steps( true, true, 0, true ) )
+);
+same(
+	'a real cart found the automation, no test yet',
+	array( 'connect' => true, 'enable' => true, 'emails' => true, 'test' => false ),
+	$esx_done( EmailSendX_Cart::build_setup_steps( true, true, 1, false ) )
+);
+same(
+	'everything done',
+	array( 'connect' => true, 'enable' => true, 'emails' => true, 'test' => true ),
+	$esx_done( EmailSendX_Cart::build_setup_steps( true, true, 1, true ) )
+);
+
+section( 'cart_contents / cart_summary' );
+$esx_row = array(
+	'cart' => json_encode(
+		array(
+			'items'   => array(
+				array( 'name' => 'Blue T-shirt', 'qty' => 2, 'price' => '$40.00', 'url' => 'https://shop.test/p/1', 'image_url' => 'https://shop.test/1.jpg', 'product_id' => 11 ),
+				array( 'name' => '', 'qty' => 1 ),
+				array( 'name' => 'Mug', 'qty' => 0 ),
+			),
+			'coupons' => array( 'WELCOME' ),
+			'total'   => '$52.00',
+		)
+	),
+);
+$esx_contents = EmailSendX_Cart::cart_contents( $esx_row );
+same( 'lines without a name are dropped', 2, count( $esx_contents['items'] ) );
+same( 'product ids are not exposed to the view', false, isset( $esx_contents['items'][0]['product_id'] ) );
+same( 'a zero quantity reads as one', 1, $esx_contents['items'][1]['qty'] );
+same( 'missing fields become empty strings', '', $esx_contents['items'][1]['image_url'] );
+same( 'coupons', array( 'WELCOME' ), $esx_contents['coupons'] );
+same( 'total', '$52.00', $esx_contents['total'] );
+same( 'a broken snapshot is an empty cart', array( 'items' => array(), 'coupons' => array(), 'total' => '' ), EmailSendX_Cart::cart_contents( array( 'cart' => '{not json' ) ) );
+same( 'summary of two products', 'Blue T-shirt + 1 more', EmailSendX_Cart::cart_summary( $esx_contents['items'] ) );
+same( 'summary of one product', 'Blue T-shirt', EmailSendX_Cart::cart_summary( array( $esx_contents['items'][0] ) ) );
+same( 'summary of nothing', '', EmailSendX_Cart::cart_summary( array() ) );
+
+section( 'timeline — what happened to a cart' );
+$esx_keys = function ( $steps ) {
+	$out = array();
+	foreach ( $steps as $step ) {
+		$out[] = $step['key'];
+	}
+	return $out;
+};
+$esx_t = EmailSendX_Cart::timeline(
+	array( 'status' => 'active', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:00:00', 'abandoned_at' => null, 'closed_at' => null ),
+	60
+);
+same( 'a fresh cart: saved, then due', array( 'saved', 'due' ), $esx_keys( $esx_t ) );
+same( 'due one idle period after the last change', '2026-11-01 11:00:00', $esx_t[1]['time'] );
+check( 'the due step has not happened yet', true === $esx_t[1]['pending'] );
+
+$esx_t = EmailSendX_Cart::timeline(
+	array( 'status' => 'active', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:20:00', 'abandoned_at' => null, 'closed_at' => null ),
+	30
+);
+same( 'a changed cart: saved, changed, due', array( 'saved', 'changed', 'due' ), $esx_keys( $esx_t ) );
+same( 'due follows the change, at the chosen idle time', '2026-11-01 10:50:00', $esx_t[2]['time'] );
+
+same(
+	'abandoned: reminders started',
+	array( 'saved', 'abandoned' ),
+	$esx_keys( EmailSendX_Cart::timeline( array( 'status' => 'abandoned', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:00:00', 'abandoned_at' => '2026-11-01 11:02:00', 'closed_at' => null ) ) )
+);
+$esx_t = EmailSendX_Cart::timeline( array( 'status' => 'recovered', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:00:00', 'abandoned_at' => '2026-11-01 11:02:00', 'closed_at' => '2026-11-01 15:30:00' ) );
+same( 'recovered: saved, abandoned, recovered', array( 'saved', 'abandoned', 'recovered' ), $esx_keys( $esx_t ) );
+same( 'recovered at the order time', '2026-11-01 15:30:00', $esx_t[2]['time'] );
+same(
+	'ordered without a reminder',
+	array( 'saved', 'ordered' ),
+	$esx_keys( EmailSendX_Cart::timeline( array( 'status' => 'ordered', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:00:00', 'abandoned_at' => null, 'closed_at' => '2026-11-01 10:09:00' ) ) )
+);
+same(
+	'failed carts have no due step',
+	array( 'saved', 'failed' ),
+	$esx_keys( EmailSendX_Cart::timeline( array( 'status' => 'failed', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:00:00', 'abandoned_at' => null, 'closed_at' => null ) ) )
+);
+same(
+	'skipped carts have no due step',
+	array( 'saved', 'skipped' ),
+	$esx_keys( EmailSendX_Cart::timeline( array( 'status' => 'skipped', 'created_at' => '2026-11-01 10:00:00', 'updated_at' => '2026-11-01 10:00:00', 'abandoned_at' => null, 'closed_at' => null ) ) )
+);
 
 /* ─── Result ───────────────────────────────────────────────────────── */
 

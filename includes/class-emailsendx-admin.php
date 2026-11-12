@@ -197,8 +197,14 @@ class EmailSendX_Admin {
 	 * @return array<string,string>
 	 */
 	public static function get_tabs() {
-		return array(
-			'sync'         => __( 'Sync', 'emailsendx-sync' ),
+		$tabs = array(
+			'sync' => __( 'Sync', 'emailsendx-sync' ),
+		);
+		// Abandoned carts get their own tab, on WooCommerce shops only.
+		if ( class_exists( 'WooCommerce' ) && class_exists( 'EmailSendX_Cart' ) ) {
+			$tabs['carts'] = __( 'Carts', 'emailsendx-sync' );
+		}
+		return $tabs + array(
 			'forms'        => __( 'Forms', 'emailsendx-sync' ),
 			'newsletter'   => __( 'Newsletter', 'emailsendx-sync' ),
 			'integrations' => __( 'Integrations', 'emailsendx-sync' ),
