@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, signup form, elementor, gutenberg
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -132,6 +132,13 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.6.0 =
+* New: abandoned carts have their own Carts tab.
+* New: step-by-step setup checklist that ticks itself as you go, with one-click Turn on and Send a test cart.
+* New: results at a glance — carts saved, abandoned, recovered orders, recovered revenue and recovery rate, for the last 7 or 30 days.
+* New: every saved cart in a searchable list, with its items, value, status and a timeline of what happened; open a cart to see the link back to it and the order it became.
+* Changed: the abandoned cart settings moved from the Settings tab to the Carts tab. Your choices are kept.
+
 = 1.5.0 =
 * New: WooCommerce abandoned cart recovery — optional and off until you switch it on under Settings. Shoppers who leave a cart get your EmailSendX reminder emails with a link straight back to their cart, and reminders stop as soon as they order.
 * New: choose who can get reminders — everyone who enters an email (with a No thanks link), only shoppers who tick a consent box, or only logged-in customers.
@@ -212,6 +219,9 @@ The plugin now grows your list as well as syncing it: opt-in forms and newslette
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.6.0 =
+New: abandoned carts have their own Carts tab.
 
 = 1.5.0 =
 New: WooCommerce abandoned cart recovery — optional and off until you switch it on under Settings. Shoppers who leave a cart get your EmailSendX reminder emails with a link straight back to their cart, and reminders stop as soon as they order.
