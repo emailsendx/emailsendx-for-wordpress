@@ -200,6 +200,10 @@ function emailsendx_sync_bootstrap() {
 	// on in Settings; registers only its cron / privacy hooks until then.
 	new EmailSendX_Cart();
 
+	// Email health: pulls each contact's verdict (invalid, suppressed…)
+	// back from EmailSendX and marks users on the Users screen.
+	new EmailSendX_Status();
+
 	// Page-builder adapters — each maps the two shortcodes onto that
 	// builder's native elements. Both self-guard (WPBakery on
 	// WPB_VC_VERSION, Elementor on the `elementor/loaded` action), so each

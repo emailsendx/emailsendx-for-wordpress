@@ -63,6 +63,16 @@ wp_unschedule_hook( 'emailsendx_sync_cart_purchase' );
 delete_transient( 'emailsendx_sync_cart_lock' );
 delete_transient( 'emailsendx_sync_cart_test' );
 
+/* ─── 1c. Email health: stored statuses + pull cron ────────────────── */
+
+// Mirrors EmailSendX_Status. ShaonPro.
+// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}emailsendx_email_health" );
+wp_clear_scheduled_hook( 'emailsendx_sync_status_pull' );
+wp_clear_scheduled_hook( 'emailsendx_sync_status_continue' );
+delete_transient( 'emailsendx_status_lock' );
+delete_transient( 'emailsendx_sync_status_flash' );
+
 /* ─── 2. Delete plugin options ─────────────────────────────────────── */
 
 delete_option( $emailsendx_opt_settings );

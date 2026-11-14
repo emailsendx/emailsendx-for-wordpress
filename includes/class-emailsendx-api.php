@@ -258,6 +258,26 @@ class EmailSendX_API {
 	}
 
 	/**
+	 * GET /api/v1/contacts/status — each contact's verdict (sendable,
+	 * invalid, suppressed…). Pass `$cursor` to continue a run; `$since`
+	 * (ISO time) for a delta, empty for every contact.
+	 *
+	 * @param string $since  ISO 8601 time, or ''.
+	 * @param string $cursor `next_cursor` from the previous page, or ''.
+	 * @param int    $limit  1–1000.
+	 * @return array|WP_Error
+	 */
+	public function get_contact_statuses( $since = '', $cursor = '', $limit = 500 ) {
+		$query = array( 'limit' => max( 1, min( 1000, (int) $limit ) ) );
+		if ( '' !== (string) $cursor ) {
+			$query['cursor'] = (string) $cursor;
+		} elseif ( '' !== (string) $since ) {
+			$query['since'] = (string) $since;
+		}
+		return $this->request( 'GET', '/api/v1/contacts/status?' . http_build_query( $query, '', '&', PHP_QUERY_RFC3986 ) );
+	}
+
+	/**
 	 * POST /api/v1/events — fire a custom event for the contact with this
 	 * email (e.g. `cart_abandoned`, `purchase_completed`). EmailSendX never
 	 * creates a contact from an event; upsert the contact first when it

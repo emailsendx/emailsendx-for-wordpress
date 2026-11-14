@@ -306,6 +306,111 @@ if ( class_exists( 'EmailSendX_Log' ) && method_exists( 'EmailSendX_Log', 'get_r
 	</div>
 </div>
 
+<?php
+/* ─── Email health (pulled back from EmailSendX). ShaonPro. ─── */
+if ( class_exists( 'EmailSendX_Status' ) ) :
+	$esx_health       = EmailSendX_Status::get_counts();
+	$esx_health_state = EmailSendX_Status::get_state();
+	$esx_health_flash = get_transient( EmailSendX_Status::FLASH_TRANSIENT );
+	if ( is_array( $esx_health_flash ) ) {
+		delete_transient( EmailSendX_Status::FLASH_TRANSIENT );
+	}
+	$esx_health_last  = ! empty( $esx_health_state['last_run'] ) ? (int) $esx_health_state['last_run'] : 0;
+	$esx_health_error = ! empty( $esx_health_state['last_error'] ) ? (string) $esx_health_state['last_error'] : '';
+	$esx_health_busy  = ! empty( $esx_health_state['cursor'] );
+	$esx_users_url    = add_query_arg( EmailSendX_Status::FILTER_VAR, 'problem', admin_url( 'users.php' ) );
+	$esx_export_url   = wp_nonce_url( admin_url( 'admin-post.php?action=emailsendx_status_export' ), EmailSendX_Status::NONCE_EXPORT );
+	$esx_tiles        = array(
+		'invalid'      => __( 'Invalid', 'emailsendx-sync' ),
+		'disposable'   => __( 'Disposable', 'emailsendx-sync' ),
+		'bounced'      => __( 'Bounced', 'emailsendx-sync' ),
+		'suppressed'   => __( 'Suppressed', 'emailsendx-sync' ),
+		'unsubscribed' => __( 'Unsubscribed', 'emailsendx-sync' ),
+		'risky'        => __( 'Risky', 'emailsendx-sync' ),
+		'sendable'     => __( 'Sendable', 'emailsendx-sync' ),
+	);
+	?>
+	<div class="esx-card" id="esx-email-health">
+		<div class="esx-card-head">
+			<h2 class="esx-card-title"><?php echo esc_html__( 'Email health from EmailSendX', 'emailsendx-sync' ); ?></h2>
+		</div>
+		<p class="esx-card-sub">
+			<?php echo esc_html__( 'Addresses EmailSendX validated as invalid, or suppressed after a bounce, complaint or unsubscribe, are marked here and on the Users screen. Nothing is deleted — you decide what to clean up. Checked every six hours.', 'emailsendx-sync' ); ?>
+		</p>
+
+		<?php if ( is_array( $esx_health_flash ) && ! empty( $esx_health_flash['message'] ) ) : ?>
+			<p class="esx-cart-result <?php echo ! empty( $esx_health_flash['ok'] ) ? 'is-ok' : 'is-error'; ?>" role="status"><?php echo esc_html( $esx_health_flash['message'] ); ?></p>
+		<?php elseif ( '' !== $esx_health_error ) : ?>
+			<p class="esx-cart-result is-error" role="status"><?php echo esc_html( $esx_health_error ); ?></p>
+		<?php endif; ?>
+
+		<?php if ( $esx_health['total'] > 0 ) : ?>
+			<div class="esx-stat-grid">
+				<?php foreach ( $esx_tiles as $esx_v => $esx_label ) : ?>
+					<div class="esx-stat">
+						<span class="esx-stat-number"><?php echo esc_html( number_format_i18n( (int) $esx_health['by_verdict'][ $esx_v ] ) ); ?></span>
+						<span class="esx-stat-label"><?php echo esc_html( $esx_label ); ?></span>
+					</div>
+				<?php endforeach; ?>
+			</div>
+			<p class="esx-help">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: total needing cleanup, 2: WP users, 3: WooCommerce guest buyers */
+						__( '%1$s addresses need cleanup: %2$s WP users and %3$s WooCommerce guest buyers.', 'emailsendx-sync' ),
+						number_format_i18n( $esx_health['problem'] ),
+						number_format_i18n( $esx_health['problem_users'] ),
+						number_format_i18n( $esx_health['problem_guests'] )
+					)
+				);
+				?>
+			</p>
+		<?php elseif ( ! $esx_health_last ) : ?>
+			<p class="esx-help"><?php echo esc_html__( 'Not checked yet. Click "Check now" to pull the first results.', 'emailsendx-sync' ); ?></p>
+		<?php else : ?>
+			<p class="esx-help"><?php echo esc_html__( 'None of this site\'s addresses are in EmailSendX yet. Sync your contacts first, then validate them in EmailSendX.', 'emailsendx-sync' ); ?></p>
+		<?php endif; ?>
+
+		<div class="esx-field-row">
+			<form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" style="display:inline">
+				<?php wp_nonce_field( EmailSendX_Status::NONCE_PULL ); ?>
+				<input type="hidden" name="action" value="emailsendx_status_pull" />
+				<button type="submit" class="esx-btn esx-btn-primary"><?php echo esc_html__( 'Check now', 'emailsendx-sync' ); ?></button>
+			</form>
+			<form action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" method="post" style="display:inline">
+				<?php wp_nonce_field( EmailSendX_Status::NONCE_PULL ); ?>
+				<input type="hidden" name="action" value="emailsendx_status_pull" />
+				<input type="hidden" name="full" value="1" />
+				<button type="submit" class="esx-btn esx-btn-secondary"><?php echo esc_html__( 'Full refresh', 'emailsendx-sync' ); ?></button>
+			</form>
+			<?php if ( $esx_health['problem_users'] > 0 ) : ?>
+				<a class="esx-btn esx-btn-secondary" href="<?php echo esc_url( $esx_users_url ); ?>"><?php echo esc_html__( 'Show these users', 'emailsendx-sync' ); ?></a>
+			<?php endif; ?>
+			<?php if ( $esx_health['problem'] > 0 ) : ?>
+				<a class="esx-btn esx-btn-secondary" href="<?php echo esc_url( $esx_export_url ); ?>"><?php echo esc_html__( 'Download CSV', 'emailsendx-sync' ); ?></a>
+			<?php endif; ?>
+		</div>
+
+		<?php if ( $esx_health_last ) : ?>
+			<p class="esx-help">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %s: time ago, e.g. "5 mins" */
+						__( 'Last checked %s ago.', 'emailsendx-sync' ),
+						human_time_diff( $esx_health_last, time() )
+					)
+				);
+				if ( $esx_health_busy ) {
+					echo ' ' . esc_html__( 'A check is still running in the background.', 'emailsendx-sync' );
+				}
+				?>
+			</p>
+		<?php endif; ?>
+	</div>
+<?php endif; ?>
+
 <details class="esx-card esx-manual-card">
 	<summary class="esx-manual-summary">
 		<span class="esx-manual-summary-text">

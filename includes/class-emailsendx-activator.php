@@ -82,6 +82,10 @@ class EmailSendX_Activator {
 		if ( class_exists( 'EmailSendX_Cart' ) ) {
 			EmailSendX_Cart::unschedule();
 		}
+		// Email-health pull. Stored statuses stay until uninstall.
+		if ( class_exists( 'EmailSendX_Status' ) ) {
+			EmailSendX_Status::unschedule();
+		}
 	}
 
 	/**

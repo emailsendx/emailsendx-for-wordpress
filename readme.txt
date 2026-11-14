@@ -48,6 +48,7 @@ The same two elements are available everywhere, and they render identically no m
 * Sync WordPress users to EmailSendX
 * WooCommerce customer sync (auto-detected when WooCommerce is active)
 * WooCommerce abandoned cart recovery — optional, off until you switch it on: shoppers who leave get your EmailSendX reminder sequence with a link straight back to their cart, and reminders stop as soon as they order
+* Email health — addresses EmailSendX validated as invalid or disposable, or suppressed after a bounce, complaint or unsubscribe, are marked on the Users screen (column + filter), counted on the Sync tab and exportable as CSV. Checked every six hours; nothing is deleted for you
 * Custom field mapping with merge-tag support (`{{contact.firstName}}`, `{{contact.custom.<key>}}`)
 * Manual one-click sync, plus automatic sync on user/customer create + update
 * Sync history with per-batch breakdown (created, updated, skipped, failed)
@@ -57,6 +58,8 @@ The same two elements are available everywhere, and they render identically no m
 = Privacy =
 
 This plugin sends data to EmailSendX (the SaaS service) using the API key you configure. You control what gets sent via the Mapping tab. No contact data leaves your site until you connect a key. See [emailsendx.com/privacy](https://emailsendx.com/privacy) for the SaaS data policy.
+
+Email health reads each contact's status back from EmailSendX and stores it in a table on your site (`wp_emailsendx_email_health`), only for addresses that already belong to your site — WordPress users and WooCommerce order emails. Deleting the plugin removes the table.
 
 = Abandoned cart recovery =
 
