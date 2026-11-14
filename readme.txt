@@ -5,7 +5,7 @@ Tags: email marketing, newsletter, signup form, elementor, gutenberg
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.6.2
+Stable tag: 1.7.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -135,6 +135,9 @@ The **Sync** tab shows the last few sync runs with totals (created, updated, ski
 
 == Changelog ==
 
+= 1.7.0 =
+* New: Email health — invalid, disposable and suppressed addresses are marked on the Users screen, counted on the Sync tab and exportable as CSV.
+
 = 1.6.2 =
 * Fixed: the Carts tab could appear unstyled after an update when the browser or a cache kept the old stylesheet.
 
@@ -228,6 +231,9 @@ The plugin now grows your list as well as syncing it: opt-in forms and newslette
 * Premium admin UI.
 
 == Upgrade Notice ==
+
+= 1.7.0 =
+New: Email health — invalid, disposable and suppressed addresses are marked on the Users screen, counted on the Sync tab and exportable as CSV.
 
 = 1.6.2 =
 Fixed: the Carts tab could appear unstyled after an update when the browser or a cache kept the old stylesheet.
